@@ -71,6 +71,43 @@ export async function adminDeleteLink(id: number) {
     return { success: true }
 }
 
+export async function adminDeleteLinks(ids: number[]) {
+    const supabase = await createClient()
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return { error: "请选择要删除的链接" }
+    }
+
+    // 使用统一的认证检查
+    const authResult = await requireAuth(supabase)
+    if (authResult.error) {
+        return { error: authResult.error, needsLogin: authResult.needsLogin }
+    }
+
+    // 验证管理员权限
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', authResult.user!.id)
+        .single()
+
+    if (profile?.role !== 'admin') {
+        return { error: "无权限：需要管理员身份" }
+    }
+
+    const { error } = await supabase
+        .from('links')
+        .delete()
+        .in('id', ids)
+
+    if (error) {
+        return { error: getFriendlyErrorMessage(error) }
+    }
+
+    revalidatePath('/admin/links')
+    return { success: true }
+}
+
 // 获取所有设置
 export async function getSettings(): Promise<{ data?: AllSettings, error?: string, needsLogin?: boolean }> {
     const supabase = await createClient()

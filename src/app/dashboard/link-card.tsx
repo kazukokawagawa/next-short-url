@@ -4,7 +4,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { CopyButton } from "@/components/copy-button"
 import { motion } from "framer-motion"
-import { Link2, MoreVertical, ExternalLink, Clock, MousePointerClick, Mail, Trash2, Timer, Lock, QrCode } from "lucide-react"
+import { Link2, MoreVertical, ExternalLink, Clock, MousePointerClick, Mail, Trash2, Timer, Lock, QrCode, Check } from "lucide-react"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -48,9 +48,22 @@ interface LinkCardProps {
     index?: number
     showClickStats?: boolean
     showCreator?: boolean
+    multiSelectEnabled?: boolean
+    selected?: boolean
+    onToggleSelected?: (id: number) => void
 }
 
-export function LinkCard({ link, isAdmin = false, onDeleteSuccess, index = 0, showClickStats = true, showCreator = false }: LinkCardProps) {
+export function LinkCard({
+    link,
+    isAdmin = false,
+    onDeleteSuccess,
+    index = 0,
+    showClickStats = true,
+    showCreator = false,
+    multiSelectEnabled = false,
+    selected = false,
+    onToggleSelected
+}: LinkCardProps) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'short.link'
     const isFirstScreen = index < 12
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -112,22 +125,49 @@ export function LinkCard({ link, isAdmin = false, onDeleteSuccess, index = 0, sh
                     damping: 20,
                     delay: isFirstScreen ? index * 0.06 : 0,
                 }}
-                className="group relative rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-lg hover:border-primary/20 cursor-default"
+                className={`group relative rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-lg hover:border-primary/20 cursor-default ${selected ? "ring-2 ring-primary/60" : ""}`}
             >
                 {/* 主行：短链接 + 操作 */}
                 <div className="flex items-center justify-between gap-3">
                     {/* 左侧：短链接容器（带 hover 高亮和复制按钮） */}
                     <div className="group/link relative flex items-center gap-2 min-w-0 flex-1 rounded-md transition-colors hover:bg-primary/5 -mx-1.5 px-1.5 py-0.5">
-                        <a
-                            href={`/${link.slug}`}
-                            target="_blank"
-                            className="flex items-center gap-2 text-primary font-medium transition-colors hover:text-primary/80 min-w-0 flex-1"
-                        >
-                            <Link2 className="h-4 w-4 shrink-0 opacity-70" />
-                            <span className="truncate">
-                                {baseUrl}/{link.slug}
-                            </span>
-                        </a>
+                        {multiSelectEnabled ? (
+                            <>
+                                <button
+                                    type="button"
+                                    role="checkbox"
+                                    aria-checked={selected}
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        onToggleSelected?.(link.id)
+                                    }}
+                                    className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${selected ? "border-primary bg-primary text-primary-foreground" : "border-border/70 text-muted-foreground hover:bg-muted"}`}
+                                >
+                                    {selected ? <Check className="h-4 w-4" /> : <span className="h-4 w-4" />}
+                                </button>
+                                <a
+                                    href={`/${link.slug}`}
+                                    target="_blank"
+                                    className="flex items-center gap-2 text-primary font-medium transition-colors hover:text-primary/80 min-w-0 flex-1"
+                                >
+                                    <span className="truncate">
+                                        {baseUrl}/{link.slug}
+                                    </span>
+                                </a>
+                            </>
+                        ) : (
+                            <a
+                                href={`/${link.slug}`}
+                                target="_blank"
+                                className="flex items-center gap-2 text-primary font-medium transition-colors hover:text-primary/80 min-w-0 flex-1"
+                            >
+                                <Link2 className="h-4 w-4 shrink-0 opacity-70" />
+                                <span className="truncate">
+                                    {baseUrl}/{link.slug}
+                                </span>
+                            </a>
+                        )}
                         {/* 桌面端：hover 时显示复制按钮 */}
                         <div className="hidden md:block opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0">
                             <CopyButton slug={link.slug} />

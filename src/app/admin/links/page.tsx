@@ -1,94 +1,57 @@
-'use client'
+import { createClient } from "@/utils/supabase/server"
+import { redirect } from "next/navigation"
+import type { Link } from "@/app/dashboard/links-table"
+import { AdminLinksClient } from "./admin-links-client"
 
-import { createClient } from "@/utils/supabase/client"
-import { useRouter } from "next/navigation"
-import { LinksTable } from "@/app/dashboard/links-table"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-import { FadeIn } from "@/components/animations/fade-in"
-import { useEffect, useState } from "react"
-import { ActionScale } from "@/components/action-scale"
-import { useLoading } from "@/components/providers/loading-provider"
-import { SmartLoading } from "@/components/smart-loading"
+export default async function AdminLinksPage() {
+    const supabase = await createClient()
 
-export default function AdminLinksPage() {
-    const [links, setLinks] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const router = useRouter()
-    const { isLoading: isGlobalLoading, setIsLoading: setGlobalLoading } = useLoading()
-
-    const refreshLinks = async () => {
-        const supabase = createClient()
-
-        // 1. 权限校验
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            router.push("/login")
-            return
-        }
-
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-
-        if (profile?.role !== 'admin') {
-            router.push("/dashboard")
-            return
-        }
-
-        // 2. 获取所有链接数据
-        const { data: allLinks } = await supabase
-            .from('links')
-            .select('*')
-            .order('created_at', { ascending: false })
-
-        setLinks(allLinks || [])
-        setLoading(false)
-        setGlobalLoading(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+        redirect("/login")
     }
 
-    useEffect(() => {
-        // 立即关闭全局加载状态，让本页加载动画接管
-        setGlobalLoading(false)
-        refreshLinks()
-    }, [router, setGlobalLoading])
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
 
-    if (loading) {
-        return <SmartLoading />
+    if (profile?.role !== 'admin') {
+        redirect("/dashboard")
     }
 
-    return (
-        <div className="container mx-auto max-w-6xl px-4 py-8">
-            <div className="mb-8 flex flex-col items-start justify-between gap-4 border-b border-border/40 pb-6 md:flex-row md:items-center">
-                <FadeIn delay={0} className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                            setGlobalLoading(true)
-                            router.push("/admin")
-                        }}
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-foreground">全局链接管理</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">
-                            查看和管理系统内的所有短链接
-                        </p>
-                    </div>
-                </FadeIn>
-            </div>
+    const { data: allLinks } = await supabase
+        .from('links')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-            <LinksTable
-                links={links}
-                isAdmin={true}
-                onDeleteSuccess={refreshLinks}
-                showCreator={true}
-            />
-        </div>
-    )
+    const normalized: Link[] = (allLinks || []).flatMap(row => {
+        const r = row as Record<string, unknown>
+        const idRaw = r.id
+        const id = typeof idRaw === 'number' ? idRaw : Number(idRaw)
+        if (!Number.isFinite(id)) return []
+
+        const slug = typeof r.slug === 'string' ? r.slug : ''
+        const original_url = typeof r.original_url === 'string' ? r.original_url : ''
+        const created_at = typeof r.created_at === 'string' ? r.created_at : ''
+        if (!slug || !original_url || !created_at) return []
+
+        const clicksRaw = r.clicks
+        const clicks = typeof clicksRaw === 'number' ? clicksRaw : Number(clicksRaw ?? 0)
+
+        return [
+            {
+                id,
+                slug,
+                original_url,
+                created_at,
+                expires_at: typeof r.expires_at === 'string' ? r.expires_at : r.expires_at == null ? null : String(r.expires_at),
+                clicks: Number.isFinite(clicks) ? clicks : 0,
+                user_email: typeof r.user_email === 'string' ? r.user_email : undefined,
+            }
+        ]
+    })
+
+    return <AdminLinksClient links={normalized} />
 }
