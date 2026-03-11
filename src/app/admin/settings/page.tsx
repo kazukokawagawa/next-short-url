@@ -473,7 +473,7 @@ export default function AdminSettingsPage() {
                                             value={announcementContent}
                                             onChange={(e) => setAnnouncementContent(e.target.value)}
                                             placeholder="输入公告内容"
-                                            className="min-h-[80px]"
+                                            className="min-h-20"
                                         />
                                     </div>
 
@@ -586,7 +586,7 @@ export default function AdminSettingsPage() {
                                         <Label htmlFor="defaultExpiration">默认有效期</Label>
                                     </div>
                                     <Select value={defaultExpiration} onValueChange={setDefaultExpiration}>
-                                        <SelectTrigger className="w-[180px]">
+                                        <SelectTrigger className="w-45">
                                             <SelectValue placeholder="选择默认有效期" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -689,7 +689,7 @@ export default function AdminSettingsPage() {
                                     setThemeMode(mode)
                                     setTheme(mode) // 立即切换主题
                                 }}>
-                                    <SelectTrigger className="w-[140px]">
+                                    <SelectTrigger className="w-35">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -727,7 +727,7 @@ export default function AdminSettingsPage() {
                                     </p>
                                 </div>
                                 <Select value={toastPosition} onValueChange={setToastPosition}>
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-45">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>

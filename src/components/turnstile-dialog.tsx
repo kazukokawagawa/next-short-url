@@ -82,7 +82,7 @@ export function TurnstileDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-col items-center justify-center py-4 min-h-[150px]">
+                <div className="flex flex-col items-center justify-center py-4 min-h-37.5">
                     <AnimatePresence mode="wait">
                         {status === 'success' ? (
                             <motion.div
