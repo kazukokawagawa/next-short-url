@@ -2,7 +2,7 @@
 
 import { toastMessages, validateUrl, validateSlug } from '@/lib/validation'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
@@ -12,6 +12,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { User } from '@supabase/supabase-js'
 import { LinkFormFields, PasswordType } from '@/components/link-form-fields'
 import { LinkArrowIcon } from '@/components/link-arrow-icon'
+import { getPublicSecuritySettings } from '@/app/admin/actions'
+import { TurnstileDialog } from '@/components/turnstile-dialog'
 
 
 export function ShortenForm({ user, allowPublicShorten }: { user: User | null; allowPublicShorten: boolean }) {
@@ -31,6 +33,94 @@ export function ShortenForm({ user, allowPublicShorten }: { user: User | null; a
     const [passwordType, setPasswordType] = useState<PasswordType>('none')
     const [password, setPassword] = useState('')
     const [passwordError, setPasswordError] = useState('')
+
+    const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
+    const [anonymousShortenTurnstileEnabled, setAnonymousShortenTurnstileEnabled] = useState(false)
+    const [turnstileToken, setTurnstileToken] = useState('')
+    const [turnstileDialogOpen, setTurnstileDialogOpen] = useState(false)
+    const [pendingSubmit, setPendingSubmit] = useState(false)
+
+    const requiresTurnstile = !user && allowPublicShorten && anonymousShortenTurnstileEnabled && Boolean(turnstileSiteKey)
+
+    useEffect(() => {
+        getPublicSecuritySettings()
+            .then(settings => {
+                setTurnstileSiteKey(settings.siteKey)
+                setAnonymousShortenTurnstileEnabled(settings.anonymousShortenEnabled)
+            })
+            .catch(err => {
+                console.error('Failed to load security settings:', err)
+            })
+    }, [])
+
+    const submitLink = async (tokenOverride?: string) => {
+        setLoading(true)
+        setShortUrlSlug('')
+
+        const toastId = toastMessages.linkCreating()
+        const finalSlug = slug || placeholderSlug
+
+        try {
+            const res = await fetch('/api/shorten', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url,
+                    slug: finalSlug,
+                    passwordType: passwordType !== 'none' ? passwordType : undefined,
+                    password: passwordType !== 'none' ? password : undefined,
+                    turnstileToken: requiresTurnstile ? (tokenOverride || turnstileToken) : undefined
+                }),
+            })
+            const data = await res.json()
+
+            if (data.slug) {
+                setShortUrlSlug(data.slug)
+                setUrl('')
+                setSlug('')
+                setShowCustomOption(false)
+                setPasswordType('none')
+                setPassword('')
+                setPasswordError('')
+                setTurnstileToken('')
+                toastMessages.linkCreateSuccess(toastId)
+            } else {
+                if (data.error === 'URL_NOT_ACCESSIBLE') {
+                    toastMessages.urlNotAccessible(data.statusCode)
+                    toast.dismiss(toastId)
+                } else if (data.error === 'URL_TIMEOUT') {
+                    toastMessages.urlTimeout()
+                    toast.dismiss(toastId)
+                } else if (data.error === 'URL_VERIFICATION_FAILED') {
+                    toastMessages.urlVerificationFailed()
+                    toast.dismiss(toastId)
+                } else if (data.error === 'URL_MALICIOUS') {
+                    toastMessages.urlMalicious(data.threats)
+                    toast.dismiss(toastId)
+                } else if (data.error === 'URL_SUFFIX_BLOCKED') {
+                    toastMessages.urlSuffixBlocked()
+                    toast.dismiss(toastId)
+                } else if (data.error === 'URL_DOMAIN_BLOCKED') {
+                    toastMessages.urlDomainBlocked()
+                    toast.dismiss(toastId)
+                } else if (data.error === 'SLUG_BLOCKED') {
+                    toastMessages.slugBlocked()
+                    toast.dismiss(toastId)
+                } else if (data.error === '请先完成人机验证' || data.error === '人机验证失败，请重试') {
+                    setTurnstileToken('')
+                    setTurnstileDialogOpen(true)
+                    toastMessages.linkCreateError(data.error, toastId)
+                } else {
+                    toastMessages.linkCreateError(data.error || "生成失败", toastId)
+                }
+            }
+        } catch (error) {
+            console.error(error)
+            toastMessages.networkError(toastId)
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -102,77 +192,41 @@ export function ShortenForm({ user, allowPublicShorten }: { user: User | null; a
             return
         }
 
-        setLoading(true)
-        setShortUrlSlug('')
-
-        const toastId = toastMessages.linkCreating()
-
-        // 如果用户没有输入 slug，使用 placeholder
-        const finalSlug = slug || placeholderSlug
-
-        try {
-            const res = await fetch('/api/shorten', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url,
-                    slug: finalSlug,
-                    passwordType: passwordType !== 'none' ? passwordType : undefined,
-                    password: passwordType !== 'none' ? password : undefined
-                }),
-            })
-            const data = await res.json()
-
-            if (data.slug) {
-                setShortUrlSlug(data.slug)
-                // 重置表单
-                setUrl('')
-                setSlug('')
-                setShowCustomOption(false)
-                setPasswordType('none')
-                setPassword('')
-                setPasswordError('')
-                toastMessages.linkCreateSuccess(toastId)
-            } else {
-                // 根据错误类型显示不同的 toast
-                if (data.error === 'URL_NOT_ACCESSIBLE') {
-                    toastMessages.urlNotAccessible(data.statusCode)
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_TIMEOUT') {
-                    toastMessages.urlTimeout()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_VERIFICATION_FAILED') {
-                    toastMessages.urlVerificationFailed()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_MALICIOUS') {
-                    toastMessages.urlMalicious(data.threats)
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_SUFFIX_BLOCKED') {
-                    toastMessages.urlSuffixBlocked()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_DOMAIN_BLOCKED') {
-                    toastMessages.urlDomainBlocked()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'SLUG_BLOCKED') {
-                    toastMessages.slugBlocked()
-                    toast.dismiss(toastId)
-                } else {
-                    toastMessages.linkCreateError(data.error || "生成失败", toastId)
-                }
-            }
-        } catch (error) {
-            console.error(error)
-            toastMessages.networkError(toastId)
-        } finally {
-            setLoading(false)
+        if (requiresTurnstile && !turnstileToken) {
+            setPendingSubmit(true)
+            setTurnstileDialogOpen(true)
+            return
         }
+
+        await submitLink()
     }
 
     return (
         <>
+            {requiresTurnstile && (
+                <TurnstileDialog
+                    open={turnstileDialogOpen}
+                    onOpenChange={(open) => {
+                        setTurnstileDialogOpen(open)
+                        if (!open) {
+                            setPendingSubmit(false)
+                        }
+                    }}
+                    siteKey={turnstileSiteKey}
+                    title="人机验证"
+                    description="请完成验证以继续创建短链接"
+                    onSuccess={(token) => {
+                        setTurnstileToken(token)
+                        if (pendingSubmit) {
+                            setPendingSubmit(false)
+                            submitLink(token)
+                        }
+                    }}
+                    onError={() => setTurnstileToken('')}
+                />
+            )}
             <form onSubmit={handleSubmit} className="grid w-full items-center gap-4" noValidate>
 
-                {/* 核心字段组件 */}
                 <LinkFormFields
                     url={url}
                     setUrl={setUrl}

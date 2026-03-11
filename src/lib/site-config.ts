@@ -210,6 +210,7 @@ export interface SecurityConfig {
     turnstileEnabled: boolean
     turnstileSiteKey: string
     turnstileSecretKey: string
+    turnstileAnonymousShortenEnabled: boolean
     safeBrowsingEnabled: boolean
     safeBrowsingApiKey: string
     blacklistSuffix: string
@@ -222,6 +223,7 @@ const defaultSecurityConfig: SecurityConfig = {
     turnstileEnabled: false,
     turnstileSiteKey: "",
     turnstileSecretKey: "",
+    turnstileAnonymousShortenEnabled: false,
     safeBrowsingEnabled: false,
     safeBrowsingApiKey: "",
     blacklistSuffix: "",

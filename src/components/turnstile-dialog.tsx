@@ -17,6 +17,8 @@ interface TurnstileDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     siteKey: string
+    title?: string
+    description?: string
     onSuccess: (token: string) => void
     onError?: () => void
 }
@@ -25,20 +27,25 @@ export function TurnstileDialog({
     open,
     onOpenChange,
     siteKey,
+    title = "人机验证",
+    description = "请完成验证后继续",
     onSuccess,
     onError
 }: TurnstileDialogProps) {
     const [status, setStatus] = useState<'loading' | 'ready' | 'verifying' | 'success' | 'error'>('loading')
     const [widgetKey, setWidgetKey] = useState(0)
 
+    const resetWidget = () => {
+        setStatus('loading')
+        setWidgetKey(prev => prev + 1)
+    }
+
     const handleSuccess = (token: string) => {
         setStatus('success')
-        // 短暂延迟后关闭弹窗并回调
         setTimeout(() => {
             onSuccess(token)
             onOpenChange(false)
-            // 重置状态
-            setStatus('loading')
+            resetWidget()
         }, 800)
     }
 
@@ -52,26 +59,26 @@ export function TurnstileDialog({
     }
 
     const handleRetry = () => {
-        setStatus('loading')
-        setWidgetKey(prev => prev + 1) // 重新渲染 widget
+        resetWidget()
     }
 
-    const handleClose = () => {
-        onOpenChange(false)
-        setStatus('loading')
-        setWidgetKey(prev => prev + 1)
+    const handleOpenChange = (nextOpen: boolean) => {
+        onOpenChange(nextOpen)
+        if (!nextOpen) {
+            resetWidget()
+        }
     }
 
     return (
-        <Dialog open={open} onOpenChange={handleClose}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <ShieldCheck className="h-5 w-5 text-green-500" />
-                        Are You A Robot?
+                        {title}
                     </DialogTitle>
                     <DialogDescription>
-                        请完成以下验证以继续注册
+                        {description}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -142,7 +149,7 @@ export function TurnstileDialog({
                 </div>
 
                 <div className="flex justify-end">
-                    <Button variant="ghost" onClick={handleClose}>
+                    <Button variant="ghost" onClick={() => handleOpenChange(false)}>
                         取消
                     </Button>
                 </div>

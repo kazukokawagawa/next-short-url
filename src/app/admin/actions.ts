@@ -171,13 +171,12 @@ export async function saveSettings(settings: AllSettings): Promise<{ success?: b
 }
 
 // 公开获取安全设置（不需要登录，不暴露 Secret Key）
-export async function getPublicSecuritySettings(): Promise<{ enabled: boolean, siteKey: string }> {
+export async function getPublicSecuritySettings(): Promise<{ enabled: boolean, siteKey: string, anonymousShortenEnabled: boolean }> {
     const { createClient: createAdminClient } = await import('@supabase/supabase-js')
 
     // 使用 service role key 读取设置（因为登录页面没有用户）
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.log('[getPublicSecuritySettings] No SUPABASE_SERVICE_ROLE_KEY')
-        return { enabled: false, siteKey: '' }
+        return { enabled: false, siteKey: '', anonymousShortenEnabled: false }
     }
 
     const supabaseAdmin = createAdminClient(
@@ -201,18 +200,16 @@ export async function getPublicSecuritySettings(): Promise<{ enabled: boolean, s
         console.log('[getPublicSecuritySettings] Error:', error.message)
     }
 
-    console.log('[getPublicSecuritySettings] Security setting from DB:', securitySetting?.value)
-
     if (!securitySetting?.value) {
-        return { enabled: false, siteKey: '' }
+        return { enabled: false, siteKey: '', anonymousShortenEnabled: false }
     }
 
     const security = securitySetting.value as SecuritySettings
     const result = {
         enabled: security.turnstileEnabled,
-        siteKey: security.turnstileSiteKey
+        siteKey: security.turnstileSiteKey,
+        anonymousShortenEnabled: security.turnstileEnabled && (security.turnstileAnonymousShortenEnabled ?? false)
     }
-    console.log('[getPublicSecuritySettings] Returning:', result)
     return result
 }
 

@@ -63,6 +63,7 @@ export default function AdminSettingsPage() {
     const [turnstileEnabled, setTurnstileEnabled] = useState(false)
     const [turnstileSiteKey, setTurnstileSiteKey] = useState("")
     const [turnstileSecretKey, setTurnstileSecretKey] = useState("")
+    const [turnstileAnonymousShortenEnabled, setTurnstileAnonymousShortenEnabled] = useState(false)
     const [safeBrowsingEnabled, setSafeBrowsingEnabled] = useState(false)
     const [safeBrowsingApiKey, setSafeBrowsingApiKey] = useState("")
     const [blacklistSuffix, setBlacklistSuffix] = useState("")
@@ -186,6 +187,7 @@ export default function AdminSettingsPage() {
                 setTurnstileEnabled(settings.security.turnstileEnabled)
                 setTurnstileSiteKey(settings.security.turnstileSiteKey)
                 setTurnstileSecretKey(settings.security.turnstileSecretKey)
+                setTurnstileAnonymousShortenEnabled(settings.security.turnstileAnonymousShortenEnabled ?? false)
                 setSafeBrowsingEnabled(settings.security.safeBrowsingEnabled ?? false)
                 setSafeBrowsingApiKey(settings.security.safeBrowsingApiKey ?? "")
                 setBlacklistSuffix(settings.security.blacklistSuffix ?? "")
@@ -268,6 +270,7 @@ export default function AdminSettingsPage() {
                 turnstileEnabled: turnstileEnabled,
                 turnstileSiteKey: turnstileSiteKey,
                 turnstileSecretKey: turnstileSecretKey,
+                turnstileAnonymousShortenEnabled: turnstileAnonymousShortenEnabled,
                 safeBrowsingEnabled: safeBrowsingEnabled,
                 safeBrowsingApiKey: safeBrowsingApiKey,
                 blacklistSuffix: blacklistSuffix,
@@ -928,6 +931,22 @@ export default function AdminSettingsPage() {
                                 <Switch
                                     checked={turnstileEnabled}
                                     onCheckedChange={setTurnstileEnabled}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <IconLink className="h-4 w-4 text-muted-foreground" />
+                                        <Label>启用匿名创建人机验证</Label>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        开启后未登录用户创建短链接时需要完成 Turnstile 验证
+                                    </p>
+                                </div>
+                                <Switch
+                                    checked={turnstileAnonymousShortenEnabled}
+                                    onCheckedChange={setTurnstileAnonymousShortenEnabled}
+                                    disabled={!turnstileEnabled || !allowPublicShorten}
                                 />
                             </div>
                             {turnstileEnabled && (

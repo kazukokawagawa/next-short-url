@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { nanoid } from 'nanoid'
 
-import { getSiteConfig, getLinksConfig } from '@/lib/site-config'
+import { getSiteConfig, getLinksConfig, getSecurityConfig } from '@/lib/site-config'
 import { validateUrl, validateSlug } from '@/lib/url-validation'
 import { processLinkPassword } from '@/lib/password'
 import { checkPublicAccess } from '@/utils/auth'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 export async function POST(request: Request) {
-    const { url, slug, expiresAt, passwordType, password } = await request.json()
+    const { url, slug, expiresAt, passwordType, password, turnstileToken } = await request.json()
     const supabase = await createClient()
 
     // 使用统一的认证检查
@@ -20,6 +21,33 @@ export async function POST(request: Request) {
     const user = authResult.user
 
     if (!url) return NextResponse.json({ error: 'URL 不能为空' }, { status: 400 })
+
+    if (!user) {
+        const securityConfig = await getSecurityConfig()
+        const requiresTurnstile = securityConfig.turnstileEnabled && securityConfig.turnstileAnonymousShortenEnabled
+
+        if (requiresTurnstile) {
+            if (!securityConfig.turnstileSecretKey?.trim()) {
+                return NextResponse.json({ error: 'Turnstile 配置不完整' }, { status: 500 })
+            }
+
+            if (!turnstileToken) {
+                return NextResponse.json({ error: '请先完成人机验证' }, { status: 400 })
+            }
+
+            const forwardedFor = request.headers.get('x-forwarded-for')
+            const remoteIp = forwardedFor ? forwardedFor.split(',')[0]?.trim() : null
+            const result = await verifyTurnstileToken({
+                token: String(turnstileToken),
+                secretKey: securityConfig.turnstileSecretKey,
+                remoteIp
+            })
+
+            if (!result.success) {
+                return NextResponse.json({ error: '人机验证失败，请重试' }, { status: 400 })
+            }
+        }
+    }
 
     // --- URL 格式验证 ---
     try {

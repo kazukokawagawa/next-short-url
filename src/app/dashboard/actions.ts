@@ -9,8 +9,9 @@ import { headers } from "next/headers"
 
 import { requireAuth, checkPublicAccess } from "@/utils/auth"
 import { processLinkPassword } from "@/lib/password"
-import { getSiteConfig, getLinksConfig } from "@/lib/site-config"
+import { getSiteConfig, getLinksConfig, getSecurityConfig } from "@/lib/site-config"
 import { validateUrl, validateSlug } from "@/lib/url-validation"
+import { verifyTurnstileToken } from "@/lib/turnstile"
 
 // 简单的 URL 格式校验
 function isValidUrlFormat(url: string): boolean {
@@ -52,6 +53,34 @@ export async function createLink(formData: FormData) {
     const host = headersList.get("host") // 获取当前域名 (如 localhost:3000)
     if (host && url.includes(host)) {
         return { error: "不能缩短本站的链接" }
+    }
+
+    if (!user) {
+        const securityConfig = await getSecurityConfig()
+        const requiresTurnstile = securityConfig.turnstileEnabled && securityConfig.turnstileAnonymousShortenEnabled
+
+        if (requiresTurnstile) {
+            if (!securityConfig.turnstileSecretKey?.trim()) {
+                return { error: "Turnstile 配置不完整" }
+            }
+
+            const token = formData.get('turnstileToken')
+            if (!token) {
+                return { error: "请先完成人机验证" }
+            }
+
+            const forwardedFor = headersList.get('x-forwarded-for')
+            const remoteIp = forwardedFor ? forwardedFor.split(',')[0]?.trim() : null
+            const result = await verifyTurnstileToken({
+                token: String(token),
+                secretKey: securityConfig.turnstileSecretKey,
+                remoteIp
+            })
+
+            if (!result.success) {
+                return { error: "人机验证失败，请重试" }
+            }
+        }
     }
 
     // --- Slug 验证（格式 + 黑名单）---
