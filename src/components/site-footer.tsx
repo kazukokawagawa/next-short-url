@@ -58,6 +58,14 @@ export async function SiteFooter() {
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
+
+                    {/* 分隔符 */}
+                    <span className="text-muted-foreground/30">|</span>
+
+                    {/* 萌ICP备 */}
+                    <a href="https://icp.gov.moe/?keyword=20269222" target="_blank" className="hover:text-foreground transition-colors">
+                        萌ICP备20269222号
+                    </a>
                 </div>
             </div>
         </footer>
