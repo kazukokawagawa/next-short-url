@@ -1,7 +1,5 @@
 'use server'
 
-import { getSafeBrowsingConfig, checkUrlSafety } from '@/lib/safe-browsing'
-
 /**
  * URL 验证结果
  */
@@ -211,7 +209,7 @@ export async function validateUrl(
 
     // --- Google Safe Browsing 检测 (优先) ---
     console.log(`${logPrefix} ===== Safe Browsing 检测开始 =====`)
-    // 使用新的 securityConfig 中的配置，而不是再次调用 getSafeBrowsingConfig
+    // 使用 securityConfig 中的配置
     // 注意：getSecurityConfig 返回的 key 是 safeBrowsingApiKey，而 checkUrlSafety 需要 apiKey
 
     if (securityConfig.safeBrowsingEnabled && securityConfig.safeBrowsingApiKey) {
