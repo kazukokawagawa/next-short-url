@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { CookieOptions } from '@supabase/ssr'
+import { getAccountProfile } from '@/utils/auth'
 import { hasSupabaseConfig } from '@/lib/supabase-config'
 
 export async function updateSession(request: NextRequest) {
@@ -74,6 +75,18 @@ export async function updateSession(request: NextRequest) {
     // 核心逻辑：如果访问 /dashboard 且没登录，跳转去 /login
     if (request.nextUrl.pathname.startsWith('/dashboard') && !user) {
         return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    if (user && (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/admin'))) {
+        const { data: account, error } = await getAccountProfile(supabase, user.id)
+        if (error || account?.status !== 'active') {
+            await supabase.auth.signOut()
+            const target = new URL('/login', request.url)
+            target.searchParams.set('message', account?.status === 'disabled' ? '账号已被禁用' : '账号信息暂不可用')
+            const blocked = NextResponse.redirect(target)
+            response.cookies.getAll().forEach(cookie => blocked.cookies.set(cookie))
+            return blocked
+        }
     }
 
     // 2. [新增] 管理员权限保护

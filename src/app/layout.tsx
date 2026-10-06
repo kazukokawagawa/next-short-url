@@ -12,6 +12,7 @@ import { LoadingProvider } from "@/components/providers/loading-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { createClient } from "@/utils/supabase/server";
 import { AppSurface } from '@/components/app-surface';
+import { getAccountProfile } from '@/utils/auth';
 import { hasSupabaseConfig } from '@/lib/supabase-config';
 
 
@@ -65,12 +66,8 @@ export default async function RootLayout({
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      isAdmin = profile?.role === 'admin';
+      const { data: profile } = await getAccountProfile(supabase, user.id);
+      isAdmin = profile?.role === 'admin' && profile?.status === 'active';
     }
   }
 

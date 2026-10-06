@@ -42,7 +42,7 @@ export default function AdminPage() {
         {loading || error ? <AsyncState error={error} onRetry={() => setAttempt(value => value + 1)} /> : <div className="grid gap-4 md:grid-cols-3">
             <Link href="/admin/links" className="flex items-center gap-3 rounded-[8px] border bg-card p-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"><Link2 className="size-5 text-info" /><span className="font-semibold">全局链接管理</span></Link>
             <Link href="/admin/settings" className="flex items-center gap-3 rounded-[8px] border bg-card p-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"><Settings2 className="size-5 text-muted-foreground" /><span className="font-semibold">系统设置</span></Link>
-            <div className="flex items-center gap-3 rounded-[8px] border p-4 text-muted-foreground"><UserRoundCog className="size-5" /><span>用户与权限</span><span className="ml-auto text-xs">未开放</span></div>
+            <Link href="/admin/users" className="flex items-center gap-3 rounded-[8px] border bg-card p-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"><UserRoundCog className="size-5 text-info" /><span className="font-semibold">用户与权限</span></Link>
         </div>}
     </Container>
 }

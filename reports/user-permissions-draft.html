@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>LinkFlow 用户与权限方案草稿</title>
+<style>
+@page { size: A4; margin: 14mm 15mm; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #e8eceb; color: #202725; font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif; font-size: 9.4pt; line-height: 1.65; letter-spacing: 0; }
+.page { width: 180mm; min-height: 268mm; background: white; margin: 12mm auto; padding: 0 0 12mm; position: relative; break-after: page; }
+.page:last-child { break-after: auto; }
+.header { display: flex; justify-content: space-between; border-bottom: 1px solid #cfd9d5; padding: 0 0 4mm; margin-bottom: 6mm; font-size: 8pt; color: #64736d; }
+.footer { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; border-top: 1px solid #dfe5e2; padding-top: 3mm; color: #73817a; font-size: 7.5pt; }
+.cover { padding-top: 15mm; }
+.cover .header { margin-bottom: 20mm; }
+h1 { font-size: 29pt; line-height: 1.35; margin: 0 0 7mm; font-weight: 700; }
+h2 { font-size: 19pt; line-height: 1.4; margin: 0 0 5mm; }
+h3 { font-size: 11.5pt; line-height: 1.5; margin: 5mm 0 2mm; }
+p { margin: 0 0 3mm; }
+ul, ol { margin: 2mm 0 4mm; padding-left: 5mm; }
+li { margin-bottom: 1.4mm; }
+.lead { font-size: 11.2pt; color: #496055; }
+.eyebrow { font-size: 9pt; color: #247354; margin: 0 0 5mm; }
+.small { font-size: 8.2pt; color: #617069; }
+.note { background: #eef5f1; border-left: 3px solid #2b8561; padding: 3mm 4mm; margin: 4mm 0; }
+.warning { background: #fcf1f0; border-left-color: #bb554b; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin: 8mm 0; border-top: 1px solid #cfd9d5; border-bottom: 1px solid #cfd9d5; }
+.metric { padding: 4mm 3mm; }
+.metric strong { display: block; font-size: 21pt; color: #247354; }
+.metric span { color: #617069; font-size: 8.5pt; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 3mm 0 5mm; font-size: 8.5pt; }
+th { text-align: left; color: #29543f; background: #edf4ef; padding: 2.3mm; border-bottom: 1px solid #c7d7ce; font-weight: 600; }
+td { vertical-align: top; padding: 2.2mm; border-bottom: 1px solid #dfe6e2; overflow-wrap: anywhere; }
+.tag { display: inline-block; font-size: 7.6pt; background: #eef4f0; color: #247354; padding: .3mm 1.5mm; border-radius: 3px; margin-right: 1mm; }
+.tag.high { background: #faeeee; color: #a7473e; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 4mm 0; }
+.swatch { border: 1px solid #dfe6e2; padding: 3mm; }
+.swatch strong { display: block; margin-bottom: 1mm; }
+code { font-family: Consolas, monospace; font-size: 8pt; background: #f1f4f2; padding: 0 .5mm; }
+@media print { body { background: white; } .page { margin: 0; } }
+</style>
+</head>
+<body>
+<section class="page cover">
+<div class="header"><span>LINKFLOW / PRODUCT DRAFT</span><span>用户与权限 · v0.1</span></div>
+<p class="eyebrow">产品与技术方案草稿 · 待确认后实施</p>
+<h1>用户与权限<br>管理方案</h1>
+<p class="lead">为 LinkFlow 补齐用户管理、角色权限和后台操作边界，先统一规则，再进入页面、Server Actions 与 Supabase RLS 实现。</p>
+<div class="metrics"><div class="metric"><strong>2</strong><span>首期角色：普通用户 / 管理员</span></div><div class="metric"><strong>4</strong><span>首期后台视图与核心流程</span></div><div class="metric"><strong>0</strong><span>本草稿阶段的业务代码改动</span></div></div>
+<h3>本稿结论</h3>
+<p>首期采用“角色 + 资源所有权”的权限模型。普通用户只能管理自己的短链接和自己的账号信息；管理员可以管理全站链接、用户状态和系统设置。权限判断必须同时存在于页面入口、服务端 Action/API 和数据库 RLS，不能只依赖前端隐藏按钮。</p>
+<div class="note warning"><strong>需要先确认的产品规则：</strong>管理员是否可以禁用用户、删除用户、重置他人密码，以及管理员是否可以修改他人链接密码。这些决定会直接影响 Supabase Auth 管理 API、审计日志和数据恢复策略。</div>
+<p><strong>交付范围：</strong>用户列表、用户详情、角色调整、账号启用状态、全局链接权限和最小权限矩阵。暂不包含组织/团队、多租户、自定义角色、复杂审批和细粒度 API token。</p>
+<p class="small">项目基线：Next.js App Router、Supabase Auth、PostgreSQL RLS、现有 /dashboard 与 /admin 路由。</p>
+<div class="footer"><span>草稿 · 不代表最终数据库迁移</span><span>01 / 06</span></div>
+</section>
+
+<section class="page">
+<div class="header"><span>01 / 角色模型</span><span>保持简单，预留扩展</span></div>
+<h2>一、角色与账号状态</h2>
+<table><thead><tr><th style="width:19%">角色/状态</th><th style="width:31%">定义</th><th>首期行为</th></tr></thead><tbody>
+<tr><td><strong>普通用户</strong><br><span class="tag">user</span></td><td>已注册并通过认证的业务用户。</td><td>进入用户控制台；创建、查看、删除和更新自己的短链接；修改自己的登录密码。</td></tr>
+<tr><td><strong>管理员</strong><br><span class="tag high">admin</span></td><td>负责站点运营和数据管理的受信用户。</td><td>拥有普通用户能力；额外访问用户管理、全局链接管理和系统设置。</td></tr>
+<tr><td><strong>未登录</strong></td><td>没有有效 Supabase session 的访问者。</td><td>按站点设置使用公开创建、公开跳转；不能访问任何用户或管理数据。</td></tr>
+<tr><td><strong>已禁用</strong><br><span class="tag high">disabled</span></td><td>账号仍保留数据，但暂时禁止登录和业务操作。</td><td>登录被拒绝；已有短链是否继续跳转需要产品确认。管理员仍可查看其数据。</td></tr>
+</tbody></table>
+<h3>推荐的数据拆分</h3>
+<p><code>auth.users</code> 负责认证凭据和 Supabase 用户生命周期；<code>profiles</code> 负责业务角色、显示信息和账号状态；<code>links</code> 负责短链资源及所有权。密码 hash、service role key 等敏感值不能进入客户端 DTO。</p>
+<div class="note"><strong>建议：</strong>将当前 <code>profiles.role</code> 保留为首期兼容字段，新增 <code>status</code>、<code>display_name</code>、<code>last_seen_at</code>、<code>created_at</code> 和 <code>updated_at</code>。角色值继续限制为 <code>user/admin</code>，避免自由文本。</div>
+<h3>账号生命周期</h3>
+<ol><li>注册：Supabase Auth 创建用户，服务端可靠地创建或补齐 profile，默认 <code>role=user</code>、<code>status=active</code>。</li><li>登录：认证成功后，服务端检查 profile 是否存在且状态为 active；禁用用户立即登出并返回统一提示。</li><li>角色调整：仅管理员可操作；变更后重新验证目标用户的后台入口和数据访问。</li><li>删除/停用：首期建议只提供“禁用”，保留链接和审计数据；永久删除另行设计。</li></ol>
+<div class="footer"><span>首期权限模型：角色控制后台能力，user_id 控制资源所有权</span><span>02 / 06</span></div>
+</section>
+
+<section class="page">
+<div class="header"><span>02 / 权限矩阵</span><span>首期功能边界</span></div>
+<h2>二、功能权限矩阵</h2>
+<table><thead><tr><th style="width:32%">功能</th><th style="width:22%">未登录</th><th style="width:22%">普通用户</th><th>管理员</th></tr></thead><tbody>
+<tr><td>访问首页、公开跳转</td><td>允许</td><td>允许</td><td>允许</td></tr>
+<tr><td>公开创建短链</td><td>按站点设置</td><td>允许</td><td>允许</td></tr>
+<tr><td>访问用户控制台</td><td>禁止</td><td>允许</td><td>允许</td></tr>
+<tr><td>创建/查看自己的链接</td><td>禁止</td><td>允许</td><td>允许</td></tr>
+<tr><td>编辑/删除自己的链接</td><td>禁止</td><td>允许</td><td>允许</td></tr>
+<tr><td>查看他人链接详情</td><td>禁止</td><td>禁止</td><td>允许</td></tr>
+<tr><td>删除他人链接</td><td>禁止</td><td>禁止</td><td>允许</td></tr>
+<tr><td>访问用户管理</td><td>禁止</td><td>禁止</td><td>允许</td></tr>
+<tr><td>调整角色/禁用账号</td><td>禁止</td><td>禁止</td><td>待确认后允许</td></tr>
+<tr><td>访问系统设置</td><td>禁止</td><td>禁止</td><td>允许</td></tr>
+<tr><td>导出全站链接</td><td>禁止</td><td>禁止</td><td>允许</td></tr>
+</tbody></table>
+<h3>权限判断的三个层次</h3>
+<div class="swatches"><div class="swatch"><strong>入口层</strong><p>middleware 和页面加载时拦截未登录、非管理员访问，提供正确跳转。</p></div><div class="swatch"><strong>服务层</strong><p>每个 Action/API 使用 <code>requireAuth</code>、<code>requireAdmin</code>，并校验输入和资源归属。</p></div><div class="swatch"><strong>数据层</strong><p>RLS 作为最终边界。所有普通用户写操作必须带当前 <code>auth.uid()</code> 所有权条件。</p></div></div>
+<div class="note warning"><strong>禁止的实现方式：</strong>只在按钮上隐藏管理员功能；把全部查询切换成 service role；给 <code>links</code> 全表开放匿名读取；使用客户端传入的 user_id 决定资源归属。</div>
+<h3>首期拒绝规则</h3>
+<ul><li>普通用户访问任意 <code>/admin/*</code> 直接返回控制台或 403，不透露后台数据。</li><li>普通用户提交他人的 link id、user id 或 profile id 时，服务端返回统一无权限结果。</li><li>管理员操作不存在或已删除资源时，返回“资源不存在”，不伪造成功。</li><li>禁用账号的 session 失效后，不允许通过旧页面继续写入。</li></ul>
+<div class="footer"><span>所有写操作必须在服务端重新取得当前用户身份</span><span>03 / 06</span></div>
+</section>
+
+<section class="page">
+<div class="header"><span>03 / 页面草案</span><span>管理员后台信息架构</span></div>
+<h2>三、用户管理页面</h2>
+<h3>管理员入口：/admin</h3>
+<p>将当前“用户与权限 / 未开放”替换为可用入口。首页保持三个并列管理模块：全局链接、用户与权限、系统设置。管理员入口在普通用户控制台中继续显示为图标按钮，但只由真实角色决定。</p>
+<h3>用户列表：/admin/users</h3>
+<table><thead><tr><th style="width:25%">区域</th><th>内容</th><th style="width:28%">交互</th></tr></thead><tbody>
+<tr><td>页面头部</td><td>用户与权限、用户总数、返回管理控制台。</td><td>刷新、搜索框、状态/角色筛选。</td></tr>
+<tr><td>用户表格</td><td>邮箱、角色、状态、注册时间、最近活跃、链接数量。</td><td>点击一行进入详情；邮箱需截断且可复制。</td></tr>
+<tr><td>行操作</td><td>查看详情、调整角色、禁用/启用。</td><td>危险操作使用确认对话框；不能对当前最后一个管理员直接降权。</td></tr>
+<tr><td>状态</td><td>加载、空数据、查询失败、无权限、分页。</td><td>失败可重试；空状态不冒充查询成功。</td></tr>
+</tbody></table>
+<h3>用户详情：/admin/users/[id]</h3>
+<p>左侧展示身份与状态，右侧展示该用户的短链接摘要和操作记录。默认只显示业务字段，不显示 Auth token、密码、password_hash、Turnstile secret 或其他密钥。</p>
+<div class="note"><strong>推荐的详情操作：</strong>调整角色、禁用/启用、查看链接。暂不提供管理员代替用户修改登录密码；若确有需求，使用 Supabase Admin API 单独实现并写审计记录。</div>
+<h3>普通用户侧的变化</h3>
+<ul><li>控制台继续只展示当前用户链接；管理员可从用户详情跳转到该用户的资源过滤视图。</li><li>当账号被禁用或角色变化时，所有数据操作显示明确的会话/权限错误并重新加载。</li><li>“修改链接密码”按资源所有权显示；管理员是否可修改他人链接密码列为待确认项。</li></ul>
+<div class="footer"><span>页面先做密集、可扫描的后台工作台，不增加装饰性大卡片</span><span>04 / 06</span></div>
+</section>
+
+<section class="page">
+<div class="header"><span>04 / 技术方案</span><span>服务端、数据库与审计</span></div>
+<h2>四、实现边界</h2>
+<h3>统一权限服务</h3>
+<p>在 <code>src/utils/auth.ts</code> 增加并统一复用：</p>
+<ul><li><code>requireAuth</code>：返回当前 Supabase 用户。</li><li><code>requireAdmin</code>：返回当前用户及 profile，角色不是 admin 时返回无权限。</li><li><code>requireOwner</code>：在资源操作前校验当前用户与资源 <code>user_id</code> 一致。</li><li>所有检查保留数据库查询条件，避免“先查再写”之间被绕过。</li></ul>
+<h3>建议的 profile 字段</h3>
+<table><thead><tr><th style="width:25%">字段</th><th style="width:25%">类型</th><th>用途</th></tr></thead><tbody>
+<tr><td>id</td><td>uuid / auth.users</td><td>认证用户主键。</td></tr><tr><td>email</td><td>text</td><td>展示快照；真实认证邮箱以 Auth 为准。</td></tr><tr><td>role</td><td>enum/text check</td><td>user 或 admin。</td></tr><tr><td>status</td><td>enum/text check</td><td>active 或 disabled，默认 active。</td></tr><tr><td>created_at / updated_at</td><td>timestamptz</td><td>列表排序和变更追踪。</td></tr><tr><td>disabled_at / disabled_by</td><td>timestamptz / uuid</td><td>记录禁用来源，便于审计。</td></tr>
+</tbody></table>
+<h3>RLS 方向</h3>
+<ul><li>profiles：用户读取本人；管理员读取全部。角色和状态的更新仅允许受控服务端路径，不能开放普通用户 update。</li><li>links：用户只读写 <code>auth.uid() = user_id</code> 的资源；管理员全局读取/删除策略使用安全的 <code>is_admin()</code>。</li><li>审计表：仅服务端写入，管理员读取；不把用户输入原样写入日志。</li></ul>
+<div class="note warning"><strong>迁移注意：</strong>当前 README 中 profile 初始化、RLS 策略和管理员查询存在重复/分散描述。正式实施前应生成一次性 SQL migration，并在隔离 Supabase 项目验证匿名、用户 A、用户 B、管理员四种身份。</div>
+<div class="footer"><span>service role 只允许 server-only 代码使用，不进入客户端 bundle</span><span>05 / 06</span></div>
+</section>
+
+<section class="page">
+<div class="header"><span>05 / 验收与决策</span><span>确认后进入开发</span></div>
+<h2>五、验收清单与待确认项</h2>
+<h3>建议的验收矩阵</h3>
+<table><thead><tr><th style="width:21%">身份</th><th style="width:28%">应可执行</th><th>应被拒绝</th></tr></thead><tbody>
+<tr><td>匿名</td><td>公开跳转；按设置公开创建。</td><td>用户列表、用户详情、后台链接、系统设置。</td></tr>
+<tr><td>普通用户 A</td><td>自己的链接和账号操作。</td><td>用户 B 的链接、用户管理、管理员设置。</td></tr>
+<tr><td>普通用户 B</td><td>自己的链接和账号操作。</td><td>用户 A 的链接、用户管理、管理员设置。</td></tr>
+<tr><td>管理员</td><td>全局链接、用户管理、系统设置。</td><td>无效资源、非法字段、越权伪造 user_id。</td></tr>
+<tr><td>禁用用户</td><td>按最终规则处理公开短链。</td><td>登录、创建、编辑、删除和任何后台写操作。</td></tr>
+</tbody></table>
+<h3>需要产品确认的 6 个问题</h3>
+<ol><li>管理员是否可以禁用普通用户？禁用后该用户已经创建的短链是否继续可跳转？</li><li>管理员是否可以删除用户？首期是否只做禁用、不做永久删除？</li><li>管理员是否可以把自己降为普通用户？最后一个管理员如何保护？</li><li>管理员是否可以修改他人短链密码，还是只允许删除/查看？</li><li>是否需要审计日志？至少建议记录角色变更、禁用/启用、全局删除。</li><li>后续是否需要团队/多租户？若近期需要，profile 方案应提前避免把权限写死在 role 字段。</li></ol>
+<div class="note"><strong>推荐默认答案：</strong>首期允许管理员禁用用户，不永久删除；禁用不影响已有公开短链跳转；管理员不可降权最后一个管理员；不允许管理员修改他人短链密码；记录关键管理操作；暂不做团队权限。</div>
+<h3>确认后的实施顺序</h3>
+<p><span class="tag">1</span>补统一权限服务与 profile migration。 <span class="tag">2</span>实现用户列表/详情和管理员 Action。 <span class="tag">3</span>补 RLS 与四身份权限测试。 <span class="tag">4</span>接入后台导航、加载/失败/空状态。 <span class="tag">5</span>运行 lint、构建和真实 Supabase 隔离环境回归。</p>
+<p class="small">本 PDF 是“先看规则”的草稿，不包含已执行的数据库变更，也不应直接用于生产配置。</p>
+<div class="footer"><span>请先确认产品问题，再进入代码实现</span><span>06 / 06</span></div>
+</section>
+</body>
+</html>

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const siteConfig = await getSiteConfig()
     const authResult = await checkPublicAccess(supabase, siteConfig.allowPublicShorten)
     if (authResult.error) {
-        return NextResponse.json({ error: '未登录' }, { status: 401 })
+        return NextResponse.json({ error: authResult.error }, { status: authResult.needsLogin ? 401 : 403 })
     }
     const user = authResult.user
 

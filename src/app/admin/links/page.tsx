@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import type { LinkSummary as Link } from '@/lib/link-model'
 import { getLinksConfig } from '@/lib/site-config'
 import { AdminLinksClient } from "./admin-links-client"
+import { requireAdmin } from '@/utils/auth'
 import { hasSupabaseConfig, SUPABASE_CONFIG_ERROR } from '@/lib/supabase-config'
 
 export default async function AdminLinksPage() {
@@ -11,20 +12,10 @@ export default async function AdminLinksPage() {
     }
     const supabase = await createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-        redirect("/login")
-    }
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        redirect("/dashboard")
-    }
+    const auth = await requireAdmin(supabase)
+    if (auth.needsLogin) redirect('/login')
+    if (!auth.user) redirect('/dashboard')
+    const user = auth.user
 
     const { data: allLinks, error: queryError } = await supabase
         .from('links')

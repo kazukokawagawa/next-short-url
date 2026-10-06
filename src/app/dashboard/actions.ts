@@ -169,15 +169,15 @@ export async function deleteLink(id: number) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
     }
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
         .from('links')
         .delete()
         .eq('id', id)
         .eq('user_id', authResult.user!.id)
+        .select('id')
 
-    if (error) {
-        return { error: getFriendlyErrorMessage(error) }
-    }
+    if (error) return { error: getFriendlyErrorMessage(error) }
+    if (!deleted?.length) return { error: '链接不存在或无权限' }
 
     revalidatePath('/dashboard')
     return { success: true }
@@ -203,7 +203,7 @@ export async function updateLinkPassword(
         return { error: passwordResult.error }
     }
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
         .from('links')
         .update({
             password_type: passwordType,
@@ -211,10 +211,10 @@ export async function updateLinkPassword(
         })
         .eq('id', linkId)
         .eq('user_id', authResult.user!.id)
+        .select('id')
 
-    if (error) {
-        return { error: getFriendlyErrorMessage(error) }
-    }
+    if (error) return { error: getFriendlyErrorMessage(error) }
+    if (!updated?.length) return { error: '链接不存在或无权限' }
 
     revalidatePath('/dashboard')
     return { success: true }

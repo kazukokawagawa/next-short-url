@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 import { createClient } from "@/utils/supabase/server"
 import { getFriendlyErrorMessage } from "@/utils/error-mapping"
+import { getAccountProfile } from '@/utils/auth'
 import { getSiteSettings } from "@/app/dashboard/settings-actions"
 
 export async function login(formData: FormData) {
@@ -21,25 +22,26 @@ export async function login(formData: FormData) {
         return { error: getFriendlyErrorMessage(error) }
     }
 
+    const { data: profile, error: profileError } = await getAccountProfile(supabase, authData.user.id)
+    if (profileError || !profile || profile.status !== 'active') {
+        await supabase.auth.signOut()
+        return { error: profile?.status === 'disabled' ? '账号已被禁用，请联系管理员' : '账号信息暂不可用，请稍后重试' }
+    }
+
     // 3. 检查维护模式
     const { getMaintenanceConfig } = await import("@/lib/site-config")
     const maintenanceConfig = await getMaintenanceConfig()
 
     if (maintenanceConfig.enabled) {
         // 检查用户角色
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', authData.user.id)
-            .single()
-
-        if (profile?.role !== 'admin') {
+        if (profile.role !== 'admin') {
             // 如果不是管理员，强制登出并报错
             await supabase.auth.signOut()
             return { error: maintenanceConfig.message || "系统维护中，暂时无法登录" }
         }
     }
 
+    await supabase.rpc('record_account_activity')
     revalidatePath('/', 'layout')
     return { success: true }
 }
@@ -166,13 +168,13 @@ export async function signup(formData: FormData) {
 
             const { error: profileError } = await supabaseAdmin
                 .from('profiles')
-                .insert([
+                .upsert([
                     {
                         id: data.user.id,
                         email: data.user.email,
                         role: 'user' // 默认角色为普通用户
                     }
-                ])
+                ], { onConflict: 'id', ignoreDuplicates: true })
 
             if (profileError) {
                 console.error('Failed to create profile:', profileError)

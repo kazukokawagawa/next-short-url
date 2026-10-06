@@ -3,7 +3,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 import { getFriendlyErrorMessage } from "@/utils/error-mapping"
-import { requireAuth } from "@/utils/auth"
+import { requireAdmin } from "@/utils/auth"
 
 // 从统一类型文件导入
 import {
@@ -41,32 +41,23 @@ export async function adminDeleteLink(id: number) {
     const supabase = await createClient()
 
     // 使用统一的认证检查
-    const authResult = await requireAuth(supabase)
+    const authResult = await requireAdmin(supabase)
     if (authResult.error) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
     }
 
-    // 验证管理员权限
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authResult.user!.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        return { error: "无权限：需要管理员身份" }
-    }
-
     // 执行删除 (不检查 user_id，管理员可以删除任何链接)
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
         .from('links')
         .delete()
         .eq('id', id)
+        .select('id')
 
     if (error) {
         return { error: getFriendlyErrorMessage(error) }
     }
 
+    if (!deleted?.length) return { error: '链接不存在或无权限' }
     revalidatePath('/admin/links')
     return { success: true }
 }
@@ -79,32 +70,23 @@ export async function adminDeleteLinks(ids: number[]) {
     }
 
     // 使用统一的认证检查
-    const authResult = await requireAuth(supabase)
+    const authResult = await requireAdmin(supabase)
     if (authResult.error) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
     }
 
-    // 验证管理员权限
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authResult.user!.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        return { error: "无权限：需要管理员身份" }
-    }
-
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
         .from('links')
         .delete()
         .in('id', ids)
+        .select('id')
 
     if (error) {
         return { error: getFriendlyErrorMessage(error) }
     }
 
     revalidatePath('/admin/links')
+    if (deleted?.length !== new Set(ids).size) return { error: '部分链接不存在或未能删除，请刷新列表' }
     return { success: true }
 }
 
@@ -113,20 +95,9 @@ export async function getSettings(): Promise<{ data?: AllSettings, error?: strin
     const supabase = await createClient()
 
     // 使用统一的认证检查
-    const authResult = await requireAuth(supabase)
+    const authResult = await requireAdmin(supabase)
     if (authResult.error) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
-    }
-
-    // 验证管理员权限
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authResult.user!.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        return { error: "无权限：需要管理员身份" }
     }
 
     // 读取所有设置
@@ -163,20 +134,9 @@ export async function saveSettings(settings: AllSettings): Promise<{ success?: b
     const supabase = await createClient()
 
     // 使用统一的认证检查
-    const authResult = await requireAuth(supabase)
+    const authResult = await requireAdmin(supabase)
     if (authResult.error) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
-    }
-
-    // 验证管理员权限
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authResult.user!.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        return { error: "无权限：需要管理员身份" }
     }
 
     // 逐个更新设置
@@ -248,20 +208,9 @@ export async function cleanExpiredLinks() {
     const supabase = await createClient()
 
     // 使用统一的认证检查
-    const authResult = await requireAuth(supabase)
+    const authResult = await requireAdmin(supabase)
     if (authResult.error) {
         return { error: authResult.error, needsLogin: authResult.needsLogin }
-    }
-
-    // 验证管理员权限
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authResult.user!.id)
-        .single()
-
-    if (profile?.role !== 'admin') {
-        return { error: "无权限：需要管理员身份" }
     }
 
     // 执行清理

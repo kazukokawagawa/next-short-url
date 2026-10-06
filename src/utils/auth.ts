@@ -1,5 +1,4 @@
-'use server'
-
+// Used only by server-side authentication and middleware.
 import { SupabaseClient, User } from '@supabase/supabase-js'
 
 /**
@@ -37,6 +36,17 @@ export async function getCurrentUser(supabase: SupabaseClient): Promise<User | n
  * 验证用户必须登录（用于 Server Actions）
  * 如果未登录，返回包含 needsLogin 标记的错误对象
  */
+export async function getAccountProfile(supabase: SupabaseClient, userId: string) {
+    const result = await supabase.from('profiles').select('id, role, status').eq('id', userId).single()
+    // During rollout, legacy profiles have no status column. Never fall back for
+    // permission/network errors or when a real disabled status is present.
+    if (result.error?.code === '42703' && result.error.message.includes('status')) {
+        const legacy = await supabase.from('profiles').select('id, role').eq('id', userId).single()
+        return { ...legacy, data: legacy.data ? { ...legacy.data, status: 'active' as const } : null, legacySchema: true }
+    }
+    return { ...result, legacySchema: false }
+}
+
 export async function requireAuth(supabase: SupabaseClient): Promise<AuthResult> {
     const user = await getCurrentUser(supabase)
 
@@ -47,6 +57,10 @@ export async function requireAuth(supabase: SupabaseClient): Promise<AuthResult>
         }
     }
 
+    const { data: profile, error } = await getAccountProfile(supabase, user.id)
+    if (error || !profile) return { error: '账号信息暂不可用，请稍后重试' }
+    if (profile.status !== 'active') return { error: '账号已被禁用' }
+
     return { user }
 }
 
@@ -55,19 +69,26 @@ export async function requireAuth(supabase: SupabaseClient): Promise<AuthResult>
  * 如果未登录，抛出包含状态码的对象供 API 路由使用
  */
 export async function requireAuthForApi(supabase: SupabaseClient) {
-    const user = await getCurrentUser(supabase)
+    const auth = await requireAuth(supabase)
+    if (!auth.user) return { authenticated: false as const, user: null, error: auth.error, needsLogin: auth.needsLogin }
+    return { authenticated: true as const, user: auth.user }
+}
 
-    if (!user) {
-        return {
-            authenticated: false as const,
-            user: null
-        }
+export async function requireAdmin(supabase: SupabaseClient): Promise<AuthResult> {
+    const authResult = await requireAuth(supabase)
+    if (!authResult.user) return authResult
+
+    const { data: profile, error } = await getAccountProfile(supabase, authResult.user.id)
+
+    if (error || profile?.role !== 'admin') {
+        return { error: '无权限：需要管理员身份' }
     }
 
-    return {
-        authenticated: true as const,
-        user
+    if (profile.status && profile.status !== 'active') {
+        return { error: '账号已被禁用' }
     }
+
+    return { user: authResult.user }
 }
 
 /**
@@ -93,6 +114,10 @@ export async function checkPublicAccess(
     allowPublic: boolean
 ): Promise<PublicAccessResult> {
     const user = await getCurrentUser(supabase)
+    if (user) {
+        const authResult = await requireAuth(supabase)
+        if (authResult.error) return authResult
+    }
 
     // 如果不允许公开操作且用户未登录
     if (!user && !allowPublic) {
