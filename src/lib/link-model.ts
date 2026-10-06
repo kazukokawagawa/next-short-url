@@ -1,3 +1,5 @@
+import type { AccessPolicy } from '@/lib/access-policy'
+
 export type PasswordType = 'none' | 'six_digit' | 'custom'
 
 export function validateLinkPassword(type: PasswordType, value: string): string | undefined {
@@ -14,6 +16,7 @@ export interface LinkSummary {
     clicks: number
     user_id?: string | null
     user_email?: string | null
+    access_policy?: AccessPolicy | null
     password_type?: string | null
 }
 

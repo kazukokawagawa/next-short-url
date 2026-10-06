@@ -7,10 +7,11 @@ import { validateUrl, validateSlug } from '@/lib/url-validation'
 import { processLinkPassword } from '@/lib/password'
 import { checkPublicAccess } from '@/utils/auth'
 import { verifyTurnstileToken } from '@/lib/turnstile'
+import { parseAccessPolicy } from '@/lib/access-policy'
 import { hasSupabaseConfig } from '@/lib/supabase-config'
 
 export async function POST(request: Request) {
-    const { url, slug, expiresAt, passwordType, password, turnstileToken } = await request.json()
+    const { url, slug, expiresAt, passwordType, password, accessPolicy: inputPolicy, turnstileToken } = await request.json()
     if (!hasSupabaseConfig()) {
         return NextResponse.json({ error: 'Supabase 尚未配置' }, { status: 503 })
     }
@@ -109,6 +110,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: passwordResult.error }, { status: 400 })
     }
 
+    let accessPolicy
+    try { accessPolicy = parseAccessPolicy(inputPolicy) }
+    catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }) }
+    if (accessPolicy.requireCaptcha) {
+        const security = await getSecurityConfig()
+        if (!security.turnstileEnabled || !security.turnstileSiteKey?.trim() || !security.turnstileSecretKey?.trim()) return NextResponse.json({ error: '人机验证尚未配置，请联系管理员' }, { status: 400 })
+    }
+
     // 插入数据
     const { data, error } = await supabase
         .from('links')
@@ -119,6 +128,7 @@ export async function POST(request: Request) {
             user_email: user?.email ?? null,
             expires_at: finalExpiresAt,
             password_type: passwordType || 'none',
+            access_policy: accessPolicy,
             password_hash: passwordResult.hash
         }])
         .select()

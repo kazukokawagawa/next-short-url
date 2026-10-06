@@ -1,3 +1,5 @@
+import { hasAccessProtection, parseAccessPolicy } from '@/lib/access-policy'
+import { getSecurityConfig } from '@/lib/site-config'
 import { createPublicSupabaseClient } from '@/lib/supabase'
 import { notFound, redirect } from 'next/navigation'
 import { VerifyPasswordClient } from '@/app/[slug]/verify/verify-client'
@@ -16,7 +18,7 @@ export default async function VerifyPasswordPage({ params }: Props) {
     // 查询链接信息
     const { data: link, error } = await supabase
         .from('links')
-        .select('id, password_type, expires_at')
+        .select('id, password_type, expires_at, access_policy')
         .eq('slug', slug)
         .single()
 
@@ -35,13 +37,17 @@ export default async function VerifyPasswordPage({ params }: Props) {
         }
     }
 
-    // 如果不需要密码，直接跳转
-    if (!link.password_type || link.password_type === 'none') redirect(`/${slug}`)
+    const policy = parseAccessPolicy(link.access_policy)
+    if ((!link.password_type || link.password_type === 'none') && !hasAccessProtection(policy)) redirect(`/${slug}`)
+    const security = policy.requireCaptcha ? await getSecurityConfig() : null
+    if (policy.requireCaptcha && (!security?.turnstileEnabled || !security.turnstileSiteKey?.trim() || !security.turnstileSecretKey?.trim())) return <section className="mx-auto max-w-md px-4 py-16"><p>人机验证配置不完整，请联系管理员。</p></section>
 
     return (
         <VerifyPasswordClient
             slug={slug}
-            passwordType={link.password_type as 'six_digit' | 'custom'}
+            passwordType={link.password_type === 'six_digit' || link.password_type === 'custom' ? link.password_type : 'none'}
+            requireCaptcha={policy.requireCaptcha}
+            siteKey={security?.turnstileSiteKey || ''}
         />
     )
 }

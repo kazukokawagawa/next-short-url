@@ -60,6 +60,14 @@ pnpm dev
 
 在使用前，你需要去 Supabase Dashboard 的 SQL Editor 运行以下 SQL 语句来初始化表结构和函数。
 
+### 访问保护扩展
+
+已有站点升级时，先在 Supabase SQL Editor 执行 `supabase/migrations/202610070003_link_access_policy.sql`。新建站点也需要在初始化表结构后执行该迁移；缺少迁移时访问保护接口会拒绝放行。
+
+创建链接的高级选项和控制台的“访问保护”菜单支持组合密码、Turnstile 人机验证、0–300 秒等待及最多 2000 字的等待期间展示内容。展示内容按纯文本渲染，不支持 HTML。Turnstile 需要先在管理设置中启用并配置 Site Key / Secret Key。
+
+等待从密码和人机验证通过后开始，展示内容随倒计时一起显示；用户需要等待服务端确认倒计时结束，再点击“继续访问”才获取目标网址。等待票据为 HttpOnly Cookie，有效期 15 分钟，绑定链接配置与请求 IP。设置 `LINK_ACCESS_SECRET` 为独立随机密钥，或使用已有 `SUPABASE_SERVICE_ROLE_KEY` 作为签名密钥。更换密钥或修改保护配置会使旧票据失效。
+
 ### 1. 初始化表结构与 RLS 策略
 
 ```SQL

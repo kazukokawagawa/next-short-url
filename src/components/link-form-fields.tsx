@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PasswordFields } from '@/components/password-fields'
 import { LinkPreview } from '@/components/link-preview'
 import type { PasswordType } from '@/lib/link-model'
+import { defaultAccessPolicy, type AccessPolicy } from '@/lib/access-policy'
 export type { PasswordType } from '@/lib/link-model'
 
 interface LinkFormFieldsProps {
@@ -19,6 +20,7 @@ interface LinkFormFieldsProps {
     passwordType: PasswordType; setPasswordType: (value: PasswordType) => void
     password: string; setPassword: (value: string) => void
     passwordError?: string; setPasswordError: (value: string) => void
+    accessPolicy?: AccessPolicy; setAccessPolicy?: (value: AccessPolicy) => void
     urlError?: string; slugError?: string; disabled?: boolean
 }
 
@@ -70,12 +72,13 @@ export function LinkFormFields(props: LinkFormFieldsProps) {
                                 <FormField id={`${id}-unit`} label="单位"><Select disabled={props.disabled} value={unit} onValueChange={value => { setUnit(value); updateExpiration('custom', custom, value) }}><SelectTrigger id={`${id}-unit`} className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">分钟</SelectItem><SelectItem value="60">小时</SelectItem><SelectItem value="1440">天</SelectItem></SelectContent></Select></FormField>
                             </motion.div>}
                         </AnimatePresence>
-                        <PasswordFields type={props.passwordType} value={props.password} onTypeChange={props.setPasswordType} onChange={value => { props.setPassword(value); props.setPasswordError('') }} error={props.passwordError} disabled={props.disabled} />
+                        <PasswordFields accessPolicy={props.accessPolicy} onAccessPolicyChange={props.setAccessPolicy} type={props.passwordType} value={props.password} onTypeChange={props.setPasswordType} onChange={value => { props.setPassword(value); props.setPasswordError('') }} error={props.passwordError} disabled={props.disabled} />
                     </div>
                 </motion.div>}
             </AnimatePresence>
         <input type="hidden" name="slug" value={props.slug} />
         <input type="hidden" name="passwordType" value={props.passwordType} />
+        <input type="hidden" name="accessPolicy" value={JSON.stringify(props.accessPolicy || defaultAccessPolicy)} />
         <input type="hidden" name="password" value={props.password} />
     </div>
 }

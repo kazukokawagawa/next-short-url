@@ -11,6 +11,7 @@ import { CopyButton } from '@/components/copy-button'
 import { TurnstileDialog } from '@/components/turnstile-dialog'
 import { getPublicSecuritySettings } from '@/app/admin/actions'
 import { buildShortUrl, validateLinkPassword, type PasswordType } from '@/lib/link-model'
+import { defaultAccessPolicy, type AccessPolicy } from '@/lib/access-policy'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -24,6 +25,7 @@ export function ShortenForm({ user, allowPublicShorten }: { user: User | null; a
     const [advanced, setAdvanced] = useState(false)
     const [expiresAt, setExpiresAt] = useState<string | undefined>()
     const [passwordType, setPasswordType] = useState<PasswordType>('none')
+    const [accessPolicy, setAccessPolicy] = useState<AccessPolicy>({ ...defaultAccessPolicy })
     const [password, setPassword] = useState('')
     const [passwordError, setPasswordError] = useState('')
     const [urlError, setUrlError] = useState('')
@@ -51,11 +53,11 @@ export function ShortenForm({ user, allowPublicShorten }: { user: User | null; a
         lock.current = true; setPending(true); setError(''); setResult('')
         const notification = toast.loading('正在生成短链接…')
         try {
-            const response = await fetch('/api/shorten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, slug, expiresAt: expiresAt === undefined ? undefined : expiresAt || null, passwordType, password, turnstileToken: token }) })
+            const response = await fetch('/api/shorten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, slug, expiresAt: expiresAt === undefined ? undefined : expiresAt || null, passwordType, password, accessPolicy, turnstileToken: token }) })
             const data = await response.json()
             if (!response.ok) { const message = data.error || '创建失败，请重试。'; setError(message); toast.error('创建失败', { id: notification, description: message }); return }
             setFormVersion(value => value + 1)
-            setResult(data.slug); toast.success('短链接已创建', { id: notification, description: '链接已经准备好，可以复制或打开。' }); setUrl(''); setSlug(''); setUrlError(''); setSlugError(''); setPassword(''); setPasswordType('none'); setAdvanced(false); setExpiresAt(undefined)
+            setResult(data.slug); toast.success('短链接已创建', { id: notification, description: '链接已经准备好，可以复制或打开。' }); setUrl(''); setSlug(''); setUrlError(''); setSlugError(''); setPassword(''); setPasswordType('none'); setAccessPolicy({ ...defaultAccessPolicy }); setAdvanced(false); setExpiresAt(undefined)
         } catch { setError('网络异常，请重试。'); toast.error('创建失败', { id: notification, description: '网络异常，请稍后重试。' }) }
         finally { lock.current = false; setPending(false) }
     }
@@ -71,7 +73,7 @@ export function ShortenForm({ user, allowPublicShorten }: { user: User | null; a
     const fullUrl = result ? buildShortUrl(result, typeof window !== 'undefined' ? window.location.origin : undefined) : ''
     return <>
         <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
-            <LinkFormFields key={formVersion} url={url} setUrl={value => { setUrl(value); setUrlError('') }} slug={slug} setSlug={value => { setSlug(value); setSlugError('') }} urlError={urlError} slugError={slugError} showCustomOption={advanced} setShowCustomOption={setAdvanced} placeholderSlug={config.placeholderSlug} defaultExpiration={config.defaultExpiration} expiresAt={expiresAt} setExpiresAt={setExpiresAt} passwordType={passwordType} setPasswordType={setPasswordType} password={password} setPassword={setPassword} passwordError={passwordError} setPasswordError={setPasswordError} disabled={pending} />
+            <LinkFormFields accessPolicy={accessPolicy} setAccessPolicy={setAccessPolicy} key={formVersion} url={url} setUrl={value => { setUrl(value); setUrlError('') }} slug={slug} setSlug={value => { setSlug(value); setSlugError('') }} urlError={urlError} slugError={slugError} showCustomOption={advanced} setShowCustomOption={setAdvanced} placeholderSlug={config.placeholderSlug} defaultExpiration={config.defaultExpiration} expiresAt={expiresAt} setExpiresAt={setExpiresAt} passwordType={passwordType} setPasswordType={setPasswordType} password={password} setPassword={setPassword} passwordError={passwordError} setPasswordError={setPasswordError} disabled={pending} />
             {error && <p role="alert" className="break-all text-sm text-destructive">{error}</p>}
             {!user && !allowPublicShorten ? <Button type="button" onClick={() => router.push('/login')} className="w-full">登录后创建</Button> : <LoadingButton loading={pending} disabled={config.loading || !security} type="submit" icon={<Link2 />} className="w-full">生成短链接</LoadingButton>}
         </form>

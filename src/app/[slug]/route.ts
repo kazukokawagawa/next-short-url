@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { hasAccessProtection } from '@/lib/access-policy'
 import { createPublicSupabaseClient } from '@/lib/supabase'
 
 // 强制动态渲染，防止 Next.js 静态缓存
@@ -15,7 +16,7 @@ export async function GET(
     // 1. 查询链接（包含密码字段）
     const { data, error } = await supabase
         .from('links')
-        .select('id, original_url, expires_at, password_type, password_hash')
+        .select('id, original_url, expires_at, password_type, password_hash, access_policy')
         .eq('slug', slug)
         .single()
 
@@ -31,7 +32,7 @@ export async function GET(
         }
 
         // 检查是否需要密码验证
-        if (data.password_type && data.password_type !== 'none' && data.password_hash) {
+        if ((data.password_type && data.password_type !== 'none') || hasAccessProtection(data.access_policy)) {
             // 需要密码，重定向到验证页面
             return NextResponse.redirect(new URL(`/${slug}/verify`, request.url))
         }

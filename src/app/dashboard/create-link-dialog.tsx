@@ -10,6 +10,7 @@ import { useLinkFormConfig } from '@/components/use-link-form-config'
 import { AsyncState } from '@/components/async-state'
 import { SessionExpiredDialog } from '@/components/session-expired-dialog'
 import { validateLinkPassword, type PasswordType } from '@/lib/link-model'
+import { defaultAccessPolicy, type AccessPolicy } from '@/lib/access-policy'
 import { createLink } from './actions'
 import { toast } from 'sonner'
 
@@ -21,6 +22,7 @@ export function CreateLinkDialog({ onSuccess }: { onSuccess?: () => void }) {
     const [expiresAt, setExpiresAt] = useState<string | undefined>()
     const [advanced, setAdvanced] = useState(false)
     const [passwordType, setPasswordType] = useState<PasswordType>('none')
+    const [accessPolicy, setAccessPolicy] = useState<AccessPolicy>({ ...defaultAccessPolicy })
     const [password, setPassword] = useState('')
     const [passwordError, setPasswordError] = useState('')
     const [urlError, setUrlError] = useState('')
@@ -32,7 +34,7 @@ export function CreateLinkDialog({ onSuccess }: { onSuccess?: () => void }) {
     const changeOpen = (value: boolean) => {
         if (lock.current) return
         setOpen(value)
-        if (!value) { setUrl(''); setSlug(''); setPassword(''); setPasswordType('none'); setAdvanced(false); setExpiresAt(undefined); setError(''); setPasswordError(''); setUrlError(''); setSlugError('') }
+        if (!value) { setUrl(''); setSlug(''); setPassword(''); setPasswordType('none'); setAccessPolicy({ ...defaultAccessPolicy }); setAdvanced(false); setExpiresAt(undefined); setError(''); setPasswordError(''); setUrlError(''); setSlugError('') }
     }
     const submit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault()
@@ -62,7 +64,7 @@ export function CreateLinkDialog({ onSuccess }: { onSuccess?: () => void }) {
         <DialogTrigger asChild><Button><Plus />创建链接</Button></DialogTrigger>
         <DialogContent><DialogHeader><DialogTitle>创建短链接</DialogTitle><DialogDescription>新链接</DialogDescription></DialogHeader>
             {config.error ? <AsyncState fullScreen={false} error={config.error} onRetry={config.retry} /> : <form onSubmit={submit} className="space-y-4">
-                <LinkFormFields url={url} setUrl={value => { setUrl(value); setUrlError('') }} slug={slug} setSlug={value => { setSlug(value); setSlugError('') }} urlError={urlError} slugError={slugError} expiresAt={expiresAt} setExpiresAt={setExpiresAt} showCustomOption={advanced} setShowCustomOption={setAdvanced} placeholderSlug={config.placeholderSlug} defaultExpiration={config.defaultExpiration} passwordType={passwordType} setPasswordType={setPasswordType} password={password} setPassword={setPassword} passwordError={passwordError} setPasswordError={setPasswordError} disabled={loading} />
+                <LinkFormFields accessPolicy={accessPolicy} setAccessPolicy={setAccessPolicy} url={url} setUrl={value => { setUrl(value); setUrlError('') }} slug={slug} setSlug={value => { setSlug(value); setSlugError('') }} urlError={urlError} slugError={slugError} expiresAt={expiresAt} setExpiresAt={setExpiresAt} showCustomOption={advanced} setShowCustomOption={setAdvanced} placeholderSlug={config.placeholderSlug} defaultExpiration={config.defaultExpiration} passwordType={passwordType} setPasswordType={setPasswordType} password={password} setPassword={setPassword} passwordError={passwordError} setPasswordError={setPasswordError} disabled={loading} />
                 {error && <p role="alert" className="break-all text-sm text-destructive">{error}</p>}
                 <DialogFooter><LoadingButton type="submit" loading={loading} disabled={config.loading} icon={<Save />}>创建链接</LoadingButton></DialogFooter>
             </form>}

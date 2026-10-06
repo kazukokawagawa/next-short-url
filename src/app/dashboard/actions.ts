@@ -11,6 +11,7 @@ import { requireAuth, checkPublicAccess } from "@/utils/auth"
 import { processLinkPassword } from "@/lib/password"
 import { getSiteConfig, getLinksConfig, getSecurityConfig } from "@/lib/site-config"
 import { validateUrl, validateSlug } from "@/lib/url-validation"
+import { parseAccessPolicy, type AccessPolicy } from '@/lib/access-policy'
 import { verifyTurnstileToken } from "@/lib/turnstile"
 
 // 简单的 URL 格式校验
@@ -112,6 +113,14 @@ export async function createLink(formData: FormData) {
     const passwordResult = await processLinkPassword(formData.get('passwordType') as string || 'none', formData.get('password') as string || '')
     if (passwordResult.error) return { error: passwordResult.error }
 
+    let accessPolicy
+    try { accessPolicy = parseAccessPolicy(JSON.parse(String(formData.get('accessPolicy') || 'null'))) }
+    catch { return { error: '访问保护设置无效，等待时间须为 0–300 秒，内容最多 2000 字' } }
+    if (accessPolicy.requireCaptcha) {
+        const security = await getSecurityConfig()
+        if (!security.turnstileEnabled || !security.turnstileSiteKey?.trim() || !security.turnstileSecretKey?.trim()) return { error: '人机验证尚未配置，请联系管理员' }
+    }
+
     const { error } = await supabase
         .from('links')
         .insert({
@@ -122,6 +131,7 @@ export async function createLink(formData: FormData) {
             is_no_index: isNoIndex,
             expires_at: formData.get('expiresAt') as string || null,
             password_type: formData.get('passwordType') as string || 'none',
+            access_policy: accessPolicy,
             password_hash: passwordResult.hash
         })
 
@@ -187,7 +197,8 @@ export async function deleteLink(id: number) {
 export async function updateLinkPassword(
     linkId: number,
     passwordType: 'none' | 'six_digit' | 'custom',
-    password: string
+    password: string,
+    inputPolicy?: AccessPolicy
 ) {
     const supabase = await createClient()
 
@@ -203,9 +214,18 @@ export async function updateLinkPassword(
         return { error: passwordResult.error }
     }
 
+    let accessPolicy
+    try { accessPolicy = inputPolicy === undefined ? undefined : parseAccessPolicy(inputPolicy) }
+    catch (error) { return { error: (error as Error).message } }
+    if (accessPolicy?.requireCaptcha) {
+        const security = await getSecurityConfig()
+        if (!security.turnstileEnabled || !security.turnstileSiteKey?.trim() || !security.turnstileSecretKey?.trim()) return { error: '人机验证尚未配置，请联系管理员' }
+    }
+
     const { data: updated, error } = await supabase
         .from('links')
         .update({
+            ...(accessPolicy ? { access_policy: accessPolicy } : {}),
             password_type: passwordType,
             password_hash: passwordResult.hash
         })

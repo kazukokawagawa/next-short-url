@@ -52,7 +52,7 @@ export function LinkCard({ link, index = 0, viewerId, isAdmin = false, onDeleteS
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild><a href={link.original_url} target="_blank" rel="noopener noreferrer"><ExternalLink />打开原始链接</a></DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setQrOpen(true)}><QrCode />二维码</DropdownMenuItem>
-                        {canEdit && <DropdownMenuItem onSelect={() => setPasswordOpen(true)}><Lock />{protectedLink ? '修改密码' : '添加密码'}</DropdownMenuItem>}
+                        {canEdit && <DropdownMenuItem onSelect={() => setPasswordOpen(true)}><Lock />访问保护</DropdownMenuItem>}
                         {canDelete && <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}><Trash2 />删除链接</DropdownMenuItem>}
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -61,13 +61,15 @@ export function LinkCard({ link, index = 0, viewerId, isAdmin = false, onDeleteS
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 text-xs text-muted-foreground">
                 <span className={`inline-flex items-center gap-1 ${expired ? 'text-warning' : ''}`}><Timer className="size-3" />{expired ? '已过期' : link.expires_at ? `${formatDistanceToNow(new Date(link.expires_at), { locale: zhCN })}后过期` : '永久'}</span>
                 <span className="inline-flex items-center gap-1"><Lock className="size-3" />{protectedLink ? (link.password_type === 'six_digit' ? '数字密码' : '口令保护') : '无密码'}</span>
+                {link.access_policy?.requireCaptcha && <span>人机验证</span>}
+                {!!link.access_policy?.waitSeconds && <span>等待 {link.access_policy.waitSeconds} 秒</span>}
                 {showClickStats && <span className="inline-flex items-center gap-1"><MousePointerClick className="size-3" />{link.clicks} 次</span>}
             </div>
             {showCreator && <p className="mt-2 break-all text-xs text-muted-foreground">{link.user_email || '匿名创建'}</p>}
         </motion.article>
         <ConfirmDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} count={1} object={link.slug} onConfirm={remove} />
         <SessionExpiredDialog open={sessionOpen} onOpenChange={setSessionOpen} />
-        {canEdit && <ResetPasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} linkId={link.id} currentPasswordType={link.password_type} onSuccess={onDeleteSuccess} />}
+        {canEdit && <ResetPasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} linkId={link.id} currentAccessPolicy={link.access_policy} currentPasswordType={link.password_type} onSuccess={onDeleteSuccess} />}
         <QRCodeDialog open={qrOpen} onOpenChange={setQrOpen} url={url} slug={link.slug} />
     </>
 }
