@@ -13,10 +13,10 @@ export async function GET(
     const supabase = createPublicSupabaseClient()
     if (!supabase) return NextResponse.json({ error: '服务暂未配置' }, { status: 503 })
 
-    // 1. 查询链接（包含密码字段）
+    // 读取实际存在的字段，兼容尚未添加 access_policy 的旧数据库。
     const { data, error } = await supabase
         .from('links')
-        .select('id, original_url, expires_at, password_type, password_hash, access_policy')
+        .select('*')
         .eq('slug', slug)
         .single()
 

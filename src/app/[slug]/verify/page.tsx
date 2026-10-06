@@ -15,10 +15,10 @@ export default async function VerifyPasswordPage({ params }: Props) {
     if (!supabase) return <section className="mx-auto flex min-h-[70dvh] max-w-md items-center justify-center px-4 text-center"><p className="text-muted-foreground">服务暂未配置，请稍后再试。</p></section>
     const { slug } = await params
 
-    // 查询链接信息
+    // 读取实际存在的字段，兼容尚未添加 access_policy 的旧数据库。
     const { data: link, error } = await supabase
         .from('links')
-        .select('id, password_type, expires_at, access_policy')
+        .select('*')
         .eq('slug', slug)
         .single()
 

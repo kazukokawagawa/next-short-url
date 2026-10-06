@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
     const supabase = createPublicSupabaseClient()
     if (!supabase) return json({ error: '服务暂未配置' }, 503)
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || 'unknown'
-    const { data: link, error } = await supabase.from('links').select('id, original_url, password_type, password_hash, expires_at, access_policy').eq('slug', slug).single()
+    // 缺少 access_policy 的旧数据库仍可验证密码；其他查询错误继续拒绝放行。
+    const { data: link, error } = await supabase.from('links').select('*').eq('slug', slug).single()
     if (error) return json({ error: error.code === 'PGRST116' ? '链接不存在' : '验证服务暂时不可用' }, error.code === 'PGRST116' ? 404 : 503)
     if (!link) return json({ error: '链接不存在' }, 404)
     if (link.expires_at && new Date(link.expires_at).getTime() <= Date.now()) return json({ error: '链接已过期' }, 410)

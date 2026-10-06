@@ -62,7 +62,7 @@ pnpm dev
 
 ### 访问保护扩展
 
-已有站点升级时，先在 Supabase SQL Editor 执行 `supabase/migrations/202610070003_link_access_policy.sql`。新建站点也需要在初始化表结构后执行该迁移；缺少迁移时访问保护接口会拒绝放行。
+已有站点升级时，先在 Supabase SQL Editor 执行 `supabase/migrations/202610070003_link_access_policy.sql`。新建站点也需要在初始化表结构后执行该迁移；缺少迁移时，已有短链接的跳转、过期检查和密码验证仍可使用，但创建或修改访问保护设置需要先完成迁移。数据库权限或网络错误仍会拒绝放行。
 
 创建链接的高级选项和控制台的“访问保护”菜单支持组合密码、Turnstile 人机验证、0–300 秒等待及最多 2000 字的等待期间展示内容。展示内容按纯文本渲染，不支持 HTML。Turnstile 需要先在管理设置中启用并配置 Site Key / Secret Key。
 
