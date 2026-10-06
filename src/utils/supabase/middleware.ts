@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import type { CookieOptions } from '@supabase/ssr'
+import { hasSupabaseConfig } from '@/lib/supabase-config'
 
 export async function updateSession(request: NextRequest) {
     let response = NextResponse.next({
@@ -7,6 +9,16 @@ export async function updateSession(request: NextRequest) {
             headers: request.headers,
         },
     })
+
+    if (!hasSupabaseConfig()) {
+        const pathname = request.nextUrl.pathname
+        if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
+            const loginUrl = new URL('/login', request.url)
+            loginUrl.searchParams.set('message', 'Supabase 尚未配置，请先设置环境变量')
+            return NextResponse.redirect(loginUrl)
+        }
+        return response
+    }
 
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +28,7 @@ export async function updateSession(request: NextRequest) {
                 get(name: string) {
                     return request.cookies.get(name)?.value
                 },
-                set(name: string, value: string, options: any) {
+                set(name: string, value: string, options: CookieOptions) {
                     request.cookies.set({
                         name,
                         value,
@@ -33,7 +45,7 @@ export async function updateSession(request: NextRequest) {
                         ...options,
                     })
                 },
-                remove(name: string, options: any) {
+                remove(name: string, options: CookieOptions) {
                     request.cookies.set({
                         name,
                         value: '',
@@ -72,7 +84,7 @@ export async function updateSession(request: NextRequest) {
         }
 
         // 检查用户角色
-        const { data: profile, error } = await supabase
+        const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', user.id)

@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Lexend', 'vivosans', var(--font-geist-sans), sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'vivosans', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -26,6 +26,13 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -63,7 +70,14 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -97,7 +111,14 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: #fca5a5;
+  --destructive-foreground: #450a0a;
+  --success: #86efac;
+  --success-foreground: #052e16;
+  --warning: #fcd34d;
+  --warning-foreground: #451a03;
+  --info: #7dd3fc;
+  --info-foreground: #082f49;
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -123,7 +144,9 @@
 
   body {
     @apply bg-background text-foreground;
-    padding-bottom: 3rem;
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: 0;
   }
 
   /* 主题切换平滑过渡 */
@@ -179,51 +202,73 @@
     /* 滑块颜色 轨道颜色 */
   }
 
-  /* 卡片悬浮动画 */
-  .card-hover {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
+}
 
-  .card-hover:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
-  }
+/* Shared, quiet motion for controls and status changes. */
+[data-slot="button"] {
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+[data-slot="button"]:active:not(:disabled) { transform: scale(0.97); }
+[data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+[role="alert"], [role="status"] { animation: fade-in 200ms ease both; }
 
-  .dark .card-hover:hover {
-    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+/* Shine is clipped to the suffix glyphs, never the input surface. */
+.suffix-text-shine {
+  color: #9333ea;
+  caret-color: var(--foreground);
+}
+.dark .suffix-text-shine { color: #c084fc; }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .suffix-text-shine {
+    background-image: linear-gradient(110deg, #9333ea 30%, #c084fc 44%, #f5d0fe 50%, #c084fc 56%, #9333ea 70%);
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: suffix-shine 3s ease-in-out infinite;
   }
+  .dark .suffix-text-shine {
+    background-image: linear-gradient(110deg, #c084fc 30%, #e9d5ff 44%, #ffffff 50%, #e9d5ff 56%, #c084fc 70%);
+  }
+}
+.suffix-text-shine::selection {
+  -webkit-text-fill-color: var(--primary-foreground);
+  background: var(--primary);
+}
+@keyframes suffix-shine {
+  0% { background-position: 160% 0; }
+  60%, 100% { background-position: -60% 0; }
+}
 
-  /* 涟漪效果容器 */
-  .ripple-container {
-    position: relative;
-    overflow: hidden;
-  }
+@keyframes loading-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+.loading-halo { animation: loading-breathe 2.4s ease-in-out infinite; }
+.loading-caption { animation: loading-breathe 1.8s ease-in-out infinite; }
 
-  .ripple-container::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), currentColor 0%, transparent 70%);
-    opacity: 0;
-    transform: scale(0);
-    transition: opacity 0.3s ease, transform 0.5s ease;
-    pointer-events: none;
+@media (prefers-reduced-motion: reduce) {
+  .suffix-text-shine, .dark .suffix-text-shine {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
   }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
-  .ripple-container:active::after {
-    opacity: 0.1;
-    transform: scale(2);
-    transition: opacity 0s, transform 0s;
+@media (pointer: coarse) {
+  [data-slot="button"], [data-slot="select-trigger"], [data-slot="input"] {
+    min-height: 44px;
   }
-
-  /* 按钮按下效果 */
-  .btn-press {
-    transition: transform 0.1s ease;
-  }
-
-  .btn-press:active {
-    transform: scale(0.97);
-  }
+  [data-size^="icon"] { min-width: 44px; }
 }
 
 /* 自定义动画 */
@@ -235,7 +280,7 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 

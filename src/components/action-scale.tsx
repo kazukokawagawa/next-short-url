@@ -5,16 +5,15 @@ import { forwardRef, ReactNode } from "react"
 
 interface ActionScaleProps extends HTMLMotionProps<"div"> {
     children: ReactNode
-    disabled?: boolean
 }
 
 export const ActionScale = forwardRef<HTMLDivElement, ActionScaleProps>(
-    ({ children, disabled, className, ...props }, ref) => {
+    ({ children, className, ...props }, ref) => {
         return (
             <motion.div
                 ref={ref}
-                whileHover={disabled ? {} : { scale: 1.05 }}
-                whileTap={disabled ? {} : { scale: 0.95 }}
+                whileHover={{}}
+                whileTap={{}}
                 className={`inline-block ${className || ''}`}
                 {...props}
             >

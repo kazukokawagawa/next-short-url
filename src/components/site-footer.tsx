@@ -13,14 +13,14 @@ export async function SiteFooter() {
 
     return (
         <footer className="w-full py-6 text-center text-xs text-muted-foreground bg-transparent">
-            <div className="container mx-auto">
+            <div className="container mx-auto px-4 break-words">
                 <p>
                     &copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
                 </p>
 
-                <div className="mt-2 flex items-center justify-center gap-4">
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     {/* 作者信息 */}
-                    <span>
+                    <span className="min-w-0 break-all">
                         Built by <a href={siteConfig.authorUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">{siteConfig.authorName}</a>
                     </span>
 
@@ -31,7 +31,7 @@ export async function SiteFooter() {
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help hover:text-foreground transition-colors">
+                                <button type="button" aria-label="版本信息" className="flex items-center gap-1 cursor-help hover:text-foreground transition-colors">
                                     {/* 显示简短版本号: v1.0.0 */}
                                     <span>v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
                                     {/* 如果是生产环境，显示 Commit Hash 的前几位 */}
@@ -40,7 +40,7 @@ export async function SiteFooter() {
                                             ({process.env.NEXT_PUBLIC_COMMIT_HASH})
                                         </span>
                                     )}
-                                </div>
+                                </button>
                             </TooltipTrigger>
 
                             {/* 悬停显示的详细信息 */}

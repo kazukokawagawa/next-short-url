@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
@@ -11,19 +10,10 @@ import React from "react";
 import { getCachedSiteConfig, getAppearanceConfig, getMaintenanceConfig } from "@/lib/site-config";
 import { LoadingProvider } from "@/components/providers/loading-provider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { MaintenanceGuard } from "@/components/maintenance-guard";
 import { createClient } from "@/utils/supabase/server";
-import { GridBackground } from "@/components/grid-background";
+import { AppSurface } from '@/components/app-surface';
+import { hasSupabaseConfig } from '@/lib/supabase-config';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 // PWA Viewport 配置
 export const viewport: Viewport = {
@@ -68,33 +58,28 @@ export default async function RootLayout({
   const maintenanceConfig = await getMaintenanceConfig();
 
   // 检查管理员权限用于绕过维护模式
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
   let isAdmin = false;
 
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    isAdmin = profile?.role === 'admin';
+  if (hasSupabaseConfig()) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      isAdmin = profile?.role === 'admin';
+    }
   }
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        {/* 预加载LCP关键字体 (ExtraBold用于标题) */}
-        <link
-          rel="preload"
-          as="font"
-          type="font/woff2"
-          href="/fonts/vivosans/vivoSans-ExtraBold.woff2"
-          crossOrigin="anonymous"
-        />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased font-sans`}
+        className="flex min-h-screen flex-col antialiased font-sans"
       >
         <ThemeProvider
           attribute="class"
@@ -103,21 +88,15 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <ThemeColorProvider primaryColor={appearanceConfig.primaryColor} />
-          {/* 全局拼图背景 */}
-          <GridBackground className="flex flex-col min-h-screen">
-            {/* 维护模式遮罩 */}
-            <MaintenanceGuard
-              enabled={maintenanceConfig.enabled}
-              message={maintenanceConfig.message}
-              bypass={isAdmin}
-            />
+          {/* 仅公开首页使用品牌背景 */}
+          <AppSurface maintenance={maintenanceConfig.enabled} message={maintenanceConfig.message} bypass={isAdmin}>
             <LoadingProvider>
               <main className="flex-1 w-full">
                 {children}
               </main>
             </LoadingProvider>
             <SiteFooter />
-          </GridBackground>
+          </AppSurface>
           <Toaster position={appearanceConfig.toastPosition} />
           <React.Suspense fallback={null}>
             <VerificationToast />

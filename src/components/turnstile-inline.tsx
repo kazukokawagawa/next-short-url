@@ -59,7 +59,7 @@ export const TurnstileInline = forwardRef<TurnstileInlineRef, TurnstileInlinePro
                     key="success"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="flex flex-col items-center gap-2 text-green-500"
+                    className="flex flex-col items-center gap-2 text-success"
                 >
                     <motion.div
                         initial={{ scale: 0 }}

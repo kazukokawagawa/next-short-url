@@ -74,7 +74,7 @@ export function TurnstileDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-green-500" />
+                        <ShieldCheck className="h-5 w-5 text-success" />
                         {title}
                     </DialogTitle>
                     <DialogDescription>
@@ -90,7 +90,7 @@ export function TurnstileDialog({
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.8 }}
-                                className="flex flex-col items-center gap-3 text-green-500"
+                                className="flex flex-col items-center gap-3 text-success"
                             >
                                 <motion.div
                                     initial={{ scale: 0 }}

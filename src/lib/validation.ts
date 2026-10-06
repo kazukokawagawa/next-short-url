@@ -166,7 +166,7 @@ export function validateUrl(url: string): boolean {
             return false
         }
         return true
-    } catch (error) {
+    } catch {
         toastMessages.urlInvalidFormat()
         return false
     }

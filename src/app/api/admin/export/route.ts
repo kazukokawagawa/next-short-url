@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
     const supabase = await createClient()
 
     // 1. 验证管理员权限

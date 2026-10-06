@@ -1,181 +1,63 @@
 'use client'
 
-import { createClient } from "@/utils/supabase/client"
-import { LinksTable, Link } from "./links-table"
-import { useRouter } from "next/navigation"
-import { signOut, getLinkSettings } from "./actions"
-import { Button } from "@/components/ui/button"
-import { CreateLinkDialog } from "./create-link-dialog"
-import { ActionScale } from "@/components/action-scale"
-import { FadeIn } from "@/components/animations/fade-in"
-import { useEffect, useState } from "react"
-import { User } from "@supabase/supabase-js"
-import { ShieldCheck, LogOut } from "lucide-react"
-import { HomeArrowLeftIcon } from "@/components/home-arrow-left-icon"
-import { SmartLoading } from "@/components/smart-loading"
-import { useLoading } from "@/components/providers/loading-provider"
+import { useEffect, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
+import { ShieldCheck, LogOut, ArrowLeft } from 'lucide-react'
+import { Container, PageHeader } from '@/components/page-header'
+import { IconButton } from '@/components/ui/icon-button'
+import { AsyncState } from '@/components/async-state'
+import { LinkList } from './link-list'
+import type { LinkSummary } from '@/lib/link-model'
+import { CreateLinkDialog } from './create-link-dialog'
+import { getLinkSettings, signOut } from './actions'
+import { hasSupabaseConfig, SUPABASE_CONFIG_ERROR } from '@/lib/supabase-config'
 
 export default function Dashboard() {
-    const [user, setUser] = useState<User | null>(null)
-    const [links, setLinks] = useState<Link[]>([])
-    const [loading, setLoading] = useState(true)
-    const [isAdmin, setIsAdmin] = useState(false)
-    const [isHomeHovered, setIsHomeHovered] = useState(false)
-    const [enableClickStats, setEnableClickStats] = useState(true)
     const router = useRouter()
-    const { setIsLoading: setGlobalLoading } = useLoading()
-
+    const [user, setUser] = useState<User | null>(null)
+    const [links, setLinks] = useState<LinkSummary[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState('')
+    const [isAdmin, setIsAdmin] = useState(false)
+    const [stats, setStats] = useState(true)
+    const [attempt, setAttempt] = useState(0)
     useEffect(() => {
-        async function loadData() {
-            const supabase = createClient()
-
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
-                router.push("/login")
+        let active = true
+        const load = async () => {
+            setLoading(true)
+            setError('')
+            if (!hasSupabaseConfig()) {
+                setError(SUPABASE_CONFIG_ERROR)
+                setLoading(false)
                 return
             }
-
-            setUser(user)
-
-            // Check if user is admin
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', user.id)
-                .single()
-
-            setIsAdmin(profile?.role === 'admin')
-
-            // 清理已过期的链接
-            await supabase
-                .from('links')
-                .delete()
-                .lt('expires_at', new Date().toISOString())
-
-            // 只获取当前用户的链接
-            const { data: linksData } = await supabase
-                .from('links')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-
-            // 获取链接设置
-            const settings = await getLinkSettings()
-            if (settings && !settings.error && 'enableClickStats' in settings) {
-                setEnableClickStats(settings.enableClickStats ?? true)
-            }
-
-            setLinks(linksData || [])
-            setLoading(false)
-            setGlobalLoading(false) // 确保全局加载状态关闭
+            try {
+                const client = createClient()
+                const { data: { user }, error: authError } = await client.auth.getUser()
+                if (!user) { router.replace('/login'); return }
+                if (authError) throw authError
+                const [{ data: profile, error: profileError }, { data, error: queryError }, settings] = await Promise.all([
+                    client.from('profiles').select('role').eq('id', user.id).single(),
+                    client.from('links').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+                    getLinkSettings()
+                ])
+                if (queryError || profileError || settings.error) throw new Error(queryError?.message || profileError?.message || settings.error)
+                if (active) { setUser(user); setLinks(data || []); setIsAdmin(profile?.role === 'admin'); setStats('enableClickStats' in settings ? settings.enableClickStats ?? true : true) }
+            } catch { if (active) setError('控制台加载失败，请重试。') }
+            finally { if (active) setLoading(false) }
         }
-        loadData()
-    }, [router, setGlobalLoading])
-
-    // 刷新链接列表的函数
-    const refreshLinks = async () => {
-        const supabase = createClient()
-
-        // 获取当前用户
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        // 0. 清理已过期的链接
-        await supabase
-            .from('links')
-            .delete()
-            .lt('expires_at', new Date().toISOString())
-
-        // 只获取当前用户的链接
-        const { data: linksData } = await supabase
-            .from('links')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-        setLinks(linksData || [])
-    }
-
-    if (loading) {
-        return <SmartLoading />
-    }
-
-    return (
-        <div className="min-h-screen">
-            {/* 主内容区域 */}
-            <div className="container mx-auto max-w-6xl px-4 pt-16 pb-8 md:pt-24 lg:pt-32">
-                {/* 头部导航栏重构：清晰分层 */}
-                <div className="mb-8 flex flex-col items-start justify-between gap-4 border-b border-border/40 pb-6 md:flex-row md:items-center">
-                    {/* 左侧：标题和副标题 */}
-                    <FadeIn delay={0}>
-                        <div>
-                            <h1 className="text-3xl font-bold tracking-tight">控制台</h1>
-                            <p className="text-muted-foreground mt-1 text-sm">
-                                欢迎回来，<span className="font-medium text-foreground">{user?.email}</span>
-                            </p>
-                        </div>
-                    </FadeIn>
-
-                    {/* 右侧：操作按钮组 */}
-                    <FadeIn delay={0.1} className="flex items-center gap-2 md:gap-3">
-                        {/* 返回首页按钮 */}
-                        <ActionScale
-                            onMouseEnter={() => setIsHomeHovered(true)}
-                            onMouseLeave={() => setIsHomeHovered(false)}
-                            onTouchStart={() => setIsHomeHovered(true)}
-                            onTouchEnd={() => setIsHomeHovered(false)}
-                        >
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="md:w-auto md:px-4"
-                                onClick={() => {
-                                    setGlobalLoading(true)
-                                    router.push("/")
-                                }}
-                            >
-                                <HomeArrowLeftIcon isHovered={isHomeHovered} />
-                                <span className="hidden md:inline">返回首页</span>
-                            </Button>
-                        </ActionScale>
-
-                        <CreateLinkDialog onSuccess={refreshLinks} />
-
-                        {isAdmin && (
-                            <ActionScale>
-                                <Button
-                                    variant="default"
-                                    size="icon"
-                                    className="md:w-auto md:px-4 md:gap-2"
-                                    onClick={() => {
-                                        setGlobalLoading(true)
-                                        router.push("/admin")
-                                    }}
-                                >
-                                    <ShieldCheck className="h-4 w-4" />
-                                    <span className="hidden md:inline">管理控制台</span>
-                                </Button>
-                            </ActionScale>
-                        )}
-
-                        <form action={signOut}>
-                            <ActionScale>
-                                <Button variant="outline" size="icon" className="md:w-auto md:px-4 md:gap-2">
-                                    <LogOut className="h-4 w-4" />
-                                    <span className="hidden md:inline">登出</span>
-                                </Button>
-                            </ActionScale>
-                        </form>
-                    </FadeIn>
-                </div>
-
-                {/* 数据表格 */}
-                <LinksTable
-                    links={links}
-                    onDeleteSuccess={refreshLinks}
-                    isAdmin={isAdmin}
-                    showClickStats={enableClickStats}
-                />
-            </div>
-        </div>
-    )
+        load()
+        return () => { active = false }
+    }, [router, attempt])
+    const refresh = () => setAttempt(value => value + 1)
+    return <Container><PageHeader title="控制台" description={user?.email} actions={<>
+        <IconButton label="返回首页" onClick={() => router.push('/')}><ArrowLeft /></IconButton>
+        <CreateLinkDialog onSuccess={refresh} />
+        {isAdmin && <IconButton label="管理控制台" onClick={() => router.push('/admin')}><ShieldCheck /></IconButton>}
+        <form action={signOut}><IconButton type="submit" label="登出"><LogOut /></IconButton></form>
+    </>} />
+        {loading || error ? <AsyncState error={error} onRetry={refresh} /> : <LinkList links={links} viewerId={user?.id} isAdmin={isAdmin} onDeleteSuccess={refresh} showClickStats={stats} />}
+    </Container>
 }

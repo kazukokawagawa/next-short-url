@@ -172,7 +172,7 @@ export async function validateUrl(
                         threats: [`Blocked Suffix: ${matchedSuffix}`]
                     }
                 }
-            } catch (e) {
+            } catch {
                 // URL 解析失败的情况，可能在前面已经被拦截，或者这里忽略
             }
         }
@@ -201,7 +201,7 @@ export async function validateUrl(
                         threats: [`Blocked Domain: ${matchedDomain}`]
                     }
                 }
-            } catch (e) {
+            } catch {
                 // Ignore parsing errors
             }
         }

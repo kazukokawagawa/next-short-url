@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -31,7 +31,7 @@ export function MaintenanceGuard({ enabled, message, bypass }: MaintenanceGuardP
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl border bg-card p-8 shadow-2xl"
+                className="relative mx-4 w-full max-w-md overflow-hidden rounded-[8px] border bg-card p-6"
             >
                 {/* 背景装饰 */}
                 <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
@@ -47,12 +47,12 @@ export function MaintenanceGuard({ enabled, message, bypass }: MaintenanceGuardP
                             damping: 15,
                             delay: 0.2
                         }}
-                        className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+                        className="mb-6 flex h-20 w-20 items-center justify-center rounded-[8px] bg-primary/10 text-primary"
                     >
                         <Wrench className="h-10 w-10" />
                     </motion.div>
 
-                    <h1 className="mb-3 text-2xl font-bold tracking-tight text-foreground">
+                    <h1 className="mb-3 text-2xl font-semibold text-foreground">
                         系统维护中
                     </h1>
 

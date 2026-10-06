@@ -7,9 +7,13 @@ import { validateUrl, validateSlug } from '@/lib/url-validation'
 import { processLinkPassword } from '@/lib/password'
 import { checkPublicAccess } from '@/utils/auth'
 import { verifyTurnstileToken } from '@/lib/turnstile'
+import { hasSupabaseConfig } from '@/lib/supabase-config'
 
 export async function POST(request: Request) {
     const { url, slug, expiresAt, passwordType, password, turnstileToken } = await request.json()
+    if (!hasSupabaseConfig()) {
+        return NextResponse.json({ error: 'Supabase 尚未配置' }, { status: 503 })
+    }
     const supabase = await createClient()
 
     // 使用统一的认证检查
@@ -91,8 +95,8 @@ export async function POST(request: Request) {
     // 计算过期时间
     let finalExpiresAt = null
 
-    if (expiresAt) {
-        finalExpiresAt = expiresAt
+    if (expiresAt !== undefined) {
+        finalExpiresAt = expiresAt || null
     } else if (linksConfig.defaultExpiration > 0) {
         const date = new Date()
         date.setMinutes(date.getMinutes() + linksConfig.defaultExpiration)

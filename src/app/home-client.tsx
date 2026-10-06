@@ -2,39 +2,51 @@
 
 import { createClient } from "@/utils/supabase/client"
 import { useRouter } from "next/navigation"
-import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ShortenForm } from "./shorten-form"
 import { FadeIn } from "@/components/animations/fade-in"
 import { useEffect, useState } from "react"
 import { User } from "@supabase/supabase-js"
-import { TextArrowIcon } from "@/components/text-arrow-icon"
 import { useLoading } from "@/components/providers/loading-provider"
 import { toast } from "sonner"
+import { AsyncState } from '@/components/async-state'
 import { AnnouncementConfig } from "@/lib/site-config"
+import { hasSupabaseConfig } from '@/lib/supabase-config'
 
 
 interface HomeClientProps {
     announcementConfig: AnnouncementConfig
     allowPublicShorten: boolean
+    configError?: string
     children: React.ReactNode
 }
 
-export function HomeClient({ announcementConfig, allowPublicShorten, children }: HomeClientProps) {
+export function HomeClient({ announcementConfig, allowPublicShorten, configError, children }: HomeClientProps) {
     const [user, setUser] = useState<User | null>(null)
     const [loading, setLoading] = useState(true)
-    const [hoveredButton, setHoveredButton] = useState<'login' | 'dashboard' | null>(null)
     const router = useRouter()
     const { setIsLoading: setGlobalLoading } = useLoading()
 
     useEffect(() => {
         async function getUser() {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            setUser(user)
-            setLoading(false)
-            setGlobalLoading(false)
+            if (!hasSupabaseConfig()) {
+                setLoading(false)
+                setGlobalLoading(false)
+                return
+            }
+            try {
+                const supabase = createClient()
+                const { data: { user }, error: userError } = await supabase.auth.getUser()
+                setUser(user)
+                if (userError) toast.warning('账户服务暂时不可用，当前按未登录状态继续。')
+            } catch {
+                setUser(null)
+                toast.warning('无法连接账户服务，当前按未登录状态继续。')
+            } finally {
+                setLoading(false)
+                setGlobalLoading(false)
+            }
         }
         getUser()
     }, [setGlobalLoading])
@@ -73,7 +85,7 @@ export function HomeClient({ announcementConfig, allowPublicShorten, children }:
 
     return (
         <>
-            <main className="flex min-h-[100dvh] flex-col items-center justify-center relative p-4 md:p-24">
+            <main className="flex min-h-[85dvh] flex-col items-center justify-center relative px-4 pt-24 pb-8">
 
                 {/* 顶部导航区 */}
                 {!loading && (
@@ -81,22 +93,18 @@ export function HomeClient({ announcementConfig, allowPublicShorten, children }:
                         <div className="flex items-center gap-4">
                             {user ? (
                                 <>
-                                    <span className="text-sm text-muted-foreground hidden md:inline-block">
+                                    <span className="text-sm text-muted-foreground hidden md:inline-block max-w-64 truncate" title={user.email}>
                                         {user.email}
                                     </span>
                                     <Button
                                         size="sm"
                                         className="md:h-10 md:px-4 md:py-2 gap-2"
-                                        onMouseEnter={() => setHoveredButton('dashboard')}
-                                        onMouseLeave={() => setHoveredButton(null)}
-                                        onTouchStart={() => setHoveredButton('dashboard')}
-                                        onTouchEnd={() => setHoveredButton(null)}
                                         onClick={() => {
                                             setGlobalLoading(true)
                                             router.push("/dashboard")
                                         }}
                                     >
-                                        <TextArrowIcon isHovered={hoveredButton === 'dashboard'} text="控制台" />
+                                        控制台
                                     </Button>
                                 </>
                             ) : (
@@ -104,16 +112,12 @@ export function HomeClient({ announcementConfig, allowPublicShorten, children }:
                                     variant="outline"
                                     size="sm"
                                     className="gap-2"
-                                    onMouseEnter={() => setHoveredButton('login')}
-                                    onMouseLeave={() => setHoveredButton(null)}
-                                    onTouchStart={() => setHoveredButton('login')}
-                                    onTouchEnd={() => setHoveredButton(null)}
                                     onClick={() => {
                                         setGlobalLoading(true)
                                         router.push("/login")
                                     }}
                                 >
-                                    <TextArrowIcon isHovered={hoveredButton === 'login'} text="登录" />
+                                    登录
                                 </Button>
                             )}
                         </div>
@@ -122,11 +126,11 @@ export function HomeClient({ announcementConfig, allowPublicShorten, children }:
 
                 {/* 核心卡片区域 */}
                 <div className="w-full max-w-md z-10">
-                    <Card className="w-full border-0 shadow-none bg-transparent sm:bg-card sm:border sm:shadow-sm transition-shadow duration-300 hover:sm:shadow-lg">
+                    <Card className="w-full border-0 shadow-none bg-transparent">
                         {children}
                         <CardContent>
                             <FadeIn delay={0.3}>
-                                <ShortenForm user={user} allowPublicShorten={allowPublicShorten} />
+                                {configError ? <AsyncState fullScreen={false} error={configError} onRetry={() => window.location.reload()} /> : <ShortenForm user={user} allowPublicShorten={allowPublicShorten} />}
                             </FadeIn>
                         </CardContent>
                     </Card>

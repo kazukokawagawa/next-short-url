@@ -15,10 +15,11 @@ export default async function Home() {
     <HomeClient
       announcementConfig={announcementConfig}
       allowPublicShorten={siteSettings.allowPublicShorten}
+      configError={siteSettings.error}
     >
       <CardHeader className="text-center pb-2 sm:pb-6">
         {/* LCP 关键: 静态渲染，无 JS 依赖，无初始隐藏 */}
-        <CardTitle className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <CardTitle className="text-2xl font-semibold lg:text-3xl">
           {siteConfig.name}
         </CardTitle>
         {/* 描述文本: 应用 CSS 动画，无需 JS */}

@@ -1,319 +1,85 @@
 'use client'
 
-import { toastMessages, validateUrl, validateSlug } from '@/lib/validation'
-
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
+import { Link2, Check } from 'lucide-react'
+import { LinkFormFields } from '@/components/link-form-fields'
+import { useLinkFormConfig } from '@/components/use-link-form-config'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { AsyncState } from '@/components/async-state'
+import { CopyButton } from '@/components/copy-button'
+import { TurnstileDialog } from '@/components/turnstile-dialog'
+import { getPublicSecuritySettings } from '@/app/admin/actions'
+import { buildShortUrl, validateLinkPassword, type PasswordType } from '@/lib/link-model'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { CopyButton } from '@/components/copy-button'
-import { toast } from "sonner"
-import { LoaderCircle, KeyRound } from 'lucide-react'
-import { motion, AnimatePresence } from "framer-motion"
-import { User } from '@supabase/supabase-js'
-import { LinkFormFields, PasswordType } from '@/components/link-form-fields'
-import { LinkArrowIcon } from '@/components/link-arrow-icon'
-import { getPublicSecuritySettings } from '@/app/admin/actions'
-import { TurnstileDialog } from '@/components/turnstile-dialog'
-
+import { AnimatePresence, motion } from 'framer-motion'
+import { toast } from 'sonner'
 
 export function ShortenForm({ user, allowPublicShorten }: { user: User | null; allowPublicShorten: boolean }) {
     const router = useRouter()
-
-    // 状态管理
+    const config = useLinkFormConfig()
     const [url, setUrl] = useState('')
     const [slug, setSlug] = useState('')
-    const [showCustomOption, setShowCustomOption] = useState(false)
-    const [placeholderSlug, setPlaceholderSlug] = useState('')
-    // 结果与加载状态
-    const [shortUrlSlug, setShortUrlSlug] = useState('')
-    const [loading, setLoading] = useState(false)
-    const [isButtonHovered, setIsButtonHovered] = useState(false)
-
-    // 密码状态
+    const [advanced, setAdvanced] = useState(false)
+    const [expiresAt, setExpiresAt] = useState<string | undefined>()
     const [passwordType, setPasswordType] = useState<PasswordType>('none')
     const [password, setPassword] = useState('')
     const [passwordError, setPasswordError] = useState('')
-
-    const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
-    const [anonymousShortenTurnstileEnabled, setAnonymousShortenTurnstileEnabled] = useState(false)
-    const [turnstileToken, setTurnstileToken] = useState('')
-    const [turnstileDialogOpen, setTurnstileDialogOpen] = useState(false)
-    const [pendingSubmit, setPendingSubmit] = useState(false)
-
-    const requiresTurnstile = !user && allowPublicShorten && anonymousShortenTurnstileEnabled && Boolean(turnstileSiteKey)
-
+    const [urlError, setUrlError] = useState('')
+    const [slugError, setSlugError] = useState('')
+    const [error, setError] = useState('')
+    const [result, setResult] = useState('')
+    const [formVersion, setFormVersion] = useState(0)
+    const [pending, setPending] = useState(false)
+    const [security, setSecurity] = useState<{ siteKey: string; anonymousShortenEnabled: boolean } | null>(null)
+    const [securityError, setSecurityError] = useState('')
+    const [attempt, setAttempt] = useState(0)
+    const [captchaOpen, setCaptchaOpen] = useState(false)
+    const lock = useRef(false)
     useEffect(() => {
-        getPublicSecuritySettings()
-            .then(settings => {
-                setTurnstileSiteKey(settings.siteKey)
-                setAnonymousShortenTurnstileEnabled(settings.anonymousShortenEnabled)
-            })
-            .catch(err => {
-                console.error('Failed to load security settings:', err)
-            })
-    }, [])
-
-    const submitLink = async (tokenOverride?: string) => {
-        setLoading(true)
-        setShortUrlSlug('')
-
-        const toastId = toastMessages.linkCreating()
-        const finalSlug = slug || placeholderSlug
-
+        let active = true
+        getPublicSecuritySettings().then(value => { if (active) { setSecurity(value); setSecurityError('') } }).catch(() => { if (active) setSecurityError('安全配置加载失败，请重试。') })
+        return () => { active = false }
+    }, [attempt])
+    const submit = async (token?: string) => {
+        if (lock.current) return
+        const invalid = validateLinkPassword(passwordType, password)
+        if (invalid) { setPasswordError(invalid); setAdvanced(true); return }
+        if (!user && security?.anonymousShortenEnabled && !security.siteKey) { setError('人机验证配置不完整，请联系管理员。'); return }
+        if (!user && security?.anonymousShortenEnabled && security.siteKey && !token) { setCaptchaOpen(true); return }
+        lock.current = true; setPending(true); setError(''); setResult('')
+        const notification = toast.loading('正在生成短链接…')
         try {
-            const res = await fetch('/api/shorten', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url,
-                    slug: finalSlug,
-                    passwordType: passwordType !== 'none' ? passwordType : undefined,
-                    password: passwordType !== 'none' ? password : undefined,
-                    turnstileToken: requiresTurnstile ? (tokenOverride || turnstileToken) : undefined
-                }),
-            })
-            const data = await res.json()
-
-            if (data.slug) {
-                setShortUrlSlug(data.slug)
-                setUrl('')
-                setSlug('')
-                setShowCustomOption(false)
-                setPasswordType('none')
-                setPassword('')
-                setPasswordError('')
-                setTurnstileToken('')
-                toastMessages.linkCreateSuccess(toastId)
-            } else {
-                if (data.error === 'URL_NOT_ACCESSIBLE') {
-                    toastMessages.urlNotAccessible(data.statusCode)
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_TIMEOUT') {
-                    toastMessages.urlTimeout()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_VERIFICATION_FAILED') {
-                    toastMessages.urlVerificationFailed()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_MALICIOUS') {
-                    toastMessages.urlMalicious(data.threats)
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_SUFFIX_BLOCKED') {
-                    toastMessages.urlSuffixBlocked()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'URL_DOMAIN_BLOCKED') {
-                    toastMessages.urlDomainBlocked()
-                    toast.dismiss(toastId)
-                } else if (data.error === 'SLUG_BLOCKED') {
-                    toastMessages.slugBlocked()
-                    toast.dismiss(toastId)
-                } else if (data.error === '请先完成人机验证' || data.error === '人机验证失败，请重试') {
-                    setTurnstileToken('')
-                    setTurnstileDialogOpen(true)
-                    toastMessages.linkCreateError(data.error, toastId)
-                } else {
-                    toastMessages.linkCreateError(data.error || "生成失败", toastId)
-                }
-            }
-        } catch (error) {
-            console.error(error)
-            toastMessages.networkError(toastId)
-        } finally {
-            setLoading(false)
-        }
+            const response = await fetch('/api/shorten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, slug, expiresAt: expiresAt === undefined ? undefined : expiresAt || null, passwordType, password, turnstileToken: token }) })
+            const data = await response.json()
+            if (!response.ok) { const message = data.error || '创建失败，请重试。'; setError(message); toast.error('创建失败', { id: notification, description: message }); return }
+            setFormVersion(value => value + 1)
+            setResult(data.slug); toast.success('短链接已创建', { id: notification, description: '链接已经准备好，可以复制或打开。' }); setUrl(''); setSlug(''); setUrlError(''); setSlugError(''); setPassword(''); setPasswordType('none'); setAdvanced(false); setExpiresAt(undefined)
+        } catch { setError('网络异常，请重试。'); toast.error('创建失败', { id: notification, description: '网络异常，请稍后重试。' }) }
+        finally { lock.current = false; setPending(false) }
     }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-
-        console.log('handleSubmit - allowPublicShorten:', allowPublicShorten, 'user:', user)
-
-        // 如果不允许公开缩短且用户未登录，提示登录
-        if (!user && !allowPublicShorten) {
-            // 创建自定义登录按钮内容组件（用 div 代替 button 避免嵌套）
-            const LoginButtonContent = () => {
-                const [isHovered, setIsHovered] = useState(false)
-
-                return (
-                    <div
-                        className="relative inline-flex items-center justify-center w-12 h-full"
-                        onMouseEnter={() => setIsHovered(true)}
-                        onMouseLeave={() => setIsHovered(false)}
-                        onTouchStart={() => setIsHovered(true)}
-                        onTouchEnd={() => setIsHovered(false)}
-                    >
-                        <motion.span
-                            initial={false}
-                            animate={{
-                                opacity: isHovered ? 0 : 1,
-                                x: isHovered ? -10 : 0
-                            }}
-                            transition={{ duration: 0.2 }}
-                            className="absolute"
-                        >
-                            登录
-                        </motion.span>
-                        <motion.span
-                            initial={false}
-                            animate={{
-                                opacity: isHovered ? 1 : 0,
-                                x: isHovered ? 0 : 10
-                            }}
-                            transition={{ duration: 0.2 }}
-                            className="absolute"
-                        >
-                            →
-                        </motion.span>
-                    </div>
-                )
-            }
-
-            toastMessages.loginRequired(
-                <KeyRound className="h-5 w-5" />,
-                {
-                    label: <LoginButtonContent />,
-                    onClick: () => router.push('/login')
-                }
-            )
-            return
-        }
-
-        // 验证 URL 和 Slug
-        if (!validateUrl(url) || !validateSlug(slug)) {
-            return
-        }
-
-        // 密码验证
-        if (passwordType === 'six_digit' && password.length !== 6) {
-            toastMessages.passwordSixDigitRequired()
-            return
-        }
-        if (passwordType === 'custom' && password.length === 0) {
-            toastMessages.passwordCustomRequired()
-            return
-        }
-
-        if (requiresTurnstile && !turnstileToken) {
-            setPendingSubmit(true)
-            setTurnstileDialogOpen(true)
-            return
-        }
-
-        await submitLink()
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        const nextUrlError = /^https?:\/\/[^\s]+$/i.test(url) ? '' : '请输入以 http:// 或 https:// 开头的有效网址'
+        const nextSlugError = !slug || /^[a-zA-Z0-9_-]+$/.test(slug) ? '' : '后缀只能包含字母、数字、连字符和下划线'
+        setUrlError(nextUrlError); setSlugError(nextSlugError)
+        if (nextUrlError || nextSlugError) { if (nextSlugError) setAdvanced(true); return }
+        await submit()
     }
-
-    return (
-        <>
-            {requiresTurnstile && (
-                <TurnstileDialog
-                    open={turnstileDialogOpen}
-                    onOpenChange={(open) => {
-                        setTurnstileDialogOpen(open)
-                        if (!open) {
-                            setPendingSubmit(false)
-                        }
-                    }}
-                    siteKey={turnstileSiteKey}
-                    title="人机验证"
-                    description="请完成验证以继续创建短链接"
-                    onSuccess={(token) => {
-                        setTurnstileToken(token)
-                        if (pendingSubmit) {
-                            setPendingSubmit(false)
-                            submitLink(token)
-                        }
-                    }}
-                    onError={() => setTurnstileToken('')}
-                />
-            )}
-            <form onSubmit={handleSubmit} className="grid w-full items-center gap-4" noValidate>
-
-                <LinkFormFields
-                    url={url}
-                    setUrl={setUrl}
-                    slug={slug}
-                    setSlug={setSlug}
-                    showCustomOption={showCustomOption}
-                    setShowCustomOption={setShowCustomOption}
-                    placeholderSlug={placeholderSlug}
-                    setPlaceholderSlug={setPlaceholderSlug}
-                    passwordType={passwordType}
-                    setPasswordType={setPasswordType}
-                    password={password}
-                    setPassword={setPassword}
-                    passwordError={passwordError}
-                    setPasswordError={setPasswordError}
-                />
-
-                <Button
-                    disabled={loading}
-                    type="submit"
-                    className="w-full gap-2"
-                    onMouseEnter={() => setIsButtonHovered(true)}
-                    onMouseLeave={() => setIsButtonHovered(false)}
-                    onTouchStart={() => setIsButtonHovered(true)}
-                    onTouchEnd={() => setIsButtonHovered(false)}
-                >
-                    {loading ? (
-                        <>
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                            生成中...
-                        </>
-                    ) : (
-                        <>
-                            <LinkArrowIcon isHovered={isButtonHovered} />
-                            生成短链接
-                        </>
-                    )}
-                </Button>
-            </form>
-
-            {/* --- 结果显示 --- */}
-            <AnimatePresence>
-                {shortUrlSlug && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        className="mt-6"
-                    >
-                        <div className="rounded-lg border bg-card p-4 shadow-sm">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
-                                        <motion.svg
-                                            initial={{ scale: 0, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            transition={{ delay: 0.1, type: "spring", stiffness: 400 }}
-                                            className="h-4 w-4 text-primary"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                            strokeWidth={2.5}
-                                        >
-                                            <motion.path
-                                                initial={{ pathLength: 0 }}
-                                                animate={{ pathLength: 1 }}
-                                                transition={{ delay: 0.2, duration: 0.3 }}
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                d="M5 13l4 4L19 7"
-                                            />
-                                        </motion.svg>
-                                        <span className="text-xs font-medium text-muted-foreground">
-                                            短链接已生成
-                                        </span>
-                                    </div>
-                                    <span className="font-medium text-foreground">
-                                        {typeof window !== 'undefined' ? window.location.host : ''}/{shortUrlSlug}
-                                    </span>
-                                </div>
-                                <CopyButton slug={shortUrlSlug} />
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </>
-    )
+    if (config.error || securityError) return <AsyncState fullScreen={false} error={config.error || securityError} onRetry={() => { config.retry(); setAttempt(value => value + 1) }} />
+    const fullUrl = result ? buildShortUrl(result, typeof window !== 'undefined' ? window.location.origin : undefined) : ''
+    return <>
+        <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
+            <LinkFormFields key={formVersion} url={url} setUrl={value => { setUrl(value); setUrlError('') }} slug={slug} setSlug={value => { setSlug(value); setSlugError('') }} urlError={urlError} slugError={slugError} showCustomOption={advanced} setShowCustomOption={setAdvanced} placeholderSlug={config.placeholderSlug} defaultExpiration={config.defaultExpiration} expiresAt={expiresAt} setExpiresAt={setExpiresAt} passwordType={passwordType} setPasswordType={setPasswordType} password={password} setPassword={setPassword} passwordError={passwordError} setPasswordError={setPasswordError} disabled={pending} />
+            {error && <p role="alert" className="break-all text-sm text-destructive">{error}</p>}
+            {!user && !allowPublicShorten ? <Button type="button" onClick={() => router.push('/login')} className="w-full">登录后创建</Button> : <LoadingButton loading={pending} disabled={config.loading || !security} type="submit" icon={<Link2 />} className="w-full">生成短链接</LoadingButton>}
+        </form>
+        {security?.siteKey && <TurnstileDialog open={captchaOpen} onOpenChange={setCaptchaOpen} siteKey={security.siteKey} onSuccess={token => { setCaptchaOpen(false); submit(token) }} onError={() => setError('人机验证失败，请重试。')} />}
+        <AnimatePresence initial={false}>
+            {result && <motion.div key={result} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div role="status" className="mt-6 flex min-w-0 items-center gap-3 border-t pt-4"><Check className="size-4 shrink-0 text-success" /><a className="min-w-0 flex-1 break-all text-primary" href={fullUrl} target="_blank" rel="noopener noreferrer">{fullUrl}</a><CopyButton slug={result} /></div>
+            </motion.div>}
+        </AnimatePresence>
+    </>
 }

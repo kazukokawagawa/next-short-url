@@ -1,1133 +1,176 @@
 'use client'
 
-import { createClient } from "@/utils/supabase/client"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
-import { ArrowLeft, Globe, Link2, Palette, Database, Wrench, LoaderCircle, Save, Check, Shield, Megaphone, Bell, Ban, AlertTriangle, LayoutTemplate, MessageSquareQuote, FileText, Tags, User, UserPlus, Heading, AlignLeft, BarChart3, Ruler, Clock, Paintbrush, Moon, Trash2, CalendarClock, Download, Power, MessageSquareWarning, Bot, Key, Lock, ShieldAlert, KeyRound, FileWarning, GlobeLock, FastForward, Link as IconLink, Trash } from "lucide-react"
-import { Textarea } from "@/components/ui/textarea"
-import { FadeIn } from "@/components/animations/fade-in"
-import { useEffect, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { toast } from "sonner"
-import { getSettings, saveSettings, cleanExpiredLinks, AllSettings } from "@/app/admin/actions"
-import { SmartLoading } from "@/components/smart-loading"
-import { useLoading } from "@/components/providers/loading-provider"
-import { useTheme } from "next-themes"
-import { generatePrimaryColors } from "@/lib/color-utils"
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
+import { ArrowLeft, Save, RotateCcw, Download, Trash2 } from 'lucide-react'
+import { getSettings, saveSettings, cleanExpiredLinks, type AllSettings } from '@/app/admin/actions'
+import { Container, PageHeader } from '@/components/page-header'
+import { IconButton } from '@/components/ui/icon-button'
+import { FormInput, FormField } from '@/components/ui/form-field'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { AsyncState } from '@/components/async-state'
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
+import { generatePrimaryColors, generateDarkModePrimaryColors } from '@/lib/color-utils'
+import { toast } from 'sonner'
 
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+    return <section id={id} className="scroll-mt-6 border-b pb-6"><h2 className="mb-4 text-lg font-semibold">{title}</h2><div className="grid min-w-0 gap-4 md:grid-cols-2">{children}</div></section>
+}
+function Toggle({ id, label, checked, onChange, disabled }: { id: string; label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+    return <div className="flex min-w-0 items-center justify-between gap-4 py-2"><label htmlFor={id} className="text-sm">{label}</label><Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} /></div>
+}
+function Options({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (value: string) => void; options: [string, string][] }) {
+    return <FormField id={id} label={label}><Select value={value} onValueChange={onChange}><SelectTrigger id={id} className="w-full"><SelectValue /></SelectTrigger><SelectContent>{options.map(([value, title]) => <SelectItem value={value} key={value}>{title}</SelectItem>)}</SelectContent></Select></FormField>
+}
 export default function AdminSettingsPage() {
+    const router = useRouter()
+    const { theme, setTheme, resolvedTheme } = useTheme()
+    const [settings, setSettings] = useState<AllSettings | null>(null)
+    const [saved, setSaved] = useState<AllSettings | null>(null)
+    const [error, setError] = useState('')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const router = useRouter()
-    const { isLoading: isGlobalLoading, setIsLoading: setGlobalLoading } = useLoading()
-    const { theme, setTheme } = useTheme()
-
-    const [siteName, setSiteName] = useState("LinkFlow")
-    const [siteSubtitle, setSiteSubtitle] = useState("下一代短链接生成器")
-    const [siteDescription, setSiteDescription] = useState("让链接更短，让分享更简单")
-    const [siteKeywords, setSiteKeywords] = useState("短链接,URL Shortener,Link Management,Next.js")
-    const [authorName, setAuthorName] = useState("池鱼")
-    const [authorUrl, setAuthorUrl] = useState("https://chiyu.it")
-    const [allowPublicShorten, setAllowPublicShorten] = useState(true)
-    const [openRegistration, setOpenRegistration] = useState(true)
-    const [announcementEnabled, setAnnouncementEnabled] = useState(false)
-    const [announcementContent, setAnnouncementContent] = useState("")
-    const [announcementType, setAnnouncementType] = useState<"default" | "destructive" | "outline" | "secondary">("default")
-    const [announcementDuration, setAnnouncementDuration] = useState(5000)
-
-    // 链接设置
-    const [slugLength, setSlugLength] = useState<number | "">(6)
-    const [defaultExpiration, setDefaultExpiration] = useState<string>("0")
-    const [enableClickStats, setEnableClickStats] = useState(true)
-
-    // 外观设置
-    const [primaryColor, setPrimaryColor] = useState("#1a1a1f")
-    const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("system")
-    const [toastPosition, setToastPosition] = useState("bottom-right")
-
-    // 数据管理
-    const [autoCleanExpired, setAutoCleanExpired] = useState(false)
-    const [expiredDays, setExpiredDays] = useState<number | "">(90)
-
-    // 维护模式
-    const [maintenanceMode, setMaintenanceMode] = useState(false)
-    const [maintenanceMessage, setMaintenanceMessage] = useState("")
-
-    // 安全设置
-    const [turnstileEnabled, setTurnstileEnabled] = useState(false)
-    const [turnstileSiteKey, setTurnstileSiteKey] = useState("")
-    const [turnstileSecretKey, setTurnstileSecretKey] = useState("")
-    const [turnstileAnonymousShortenEnabled, setTurnstileAnonymousShortenEnabled] = useState(false)
-    const [safeBrowsingEnabled, setSafeBrowsingEnabled] = useState(false)
-    const [safeBrowsingApiKey, setSafeBrowsingApiKey] = useState("")
-    const [blacklistSuffix, setBlacklistSuffix] = useState("")
-    const [blacklistDomain, setBlacklistDomain] = useState("")
-    const [blacklistSlug, setBlacklistSlug] = useState("")
-    const [skipAllChecks, setSkipAllChecks] = useState(false)
-
-    // 动作状态
     const [exporting, setExporting] = useState(false)
-    const [cleaning, setCleaning] = useState(false)
-
-    // 导出所有链接
-    const handleExport = async () => {
+    const [cleanOpen, setCleanOpen] = useState(false)
+    const [attempt, setAttempt] = useState(0)
+    const initialTheme = useRef<string | undefined>(undefined)
+    const originalColors = useRef<Record<string, string>>({})
+    const currentSaved = useRef<AllSettings | null>(null)
+    const lock = useRef(false)
+    const dirty = Boolean(settings && saved && JSON.stringify(settings) !== JSON.stringify(saved))
+    useEffect(() => {
+        initialTheme.current = theme
+        originalColors.current = Object.fromEntries(['--primary', '--primary-foreground', '--sidebar-primary', '--sidebar-primary-foreground'].map(key => [key, document.documentElement.style.getPropertyValue(key)]))
+        return () => {
+            const appearance = currentSaved.current?.appearance
+            if (appearance) {
+                const dark = appearance.themeMode === 'dark' || (appearance.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+                const colors = dark ? generateDarkModePrimaryColors(appearance.primaryColor) : generatePrimaryColors(appearance.primaryColor)
+                document.documentElement.style.setProperty('--primary', colors.primary)
+                document.documentElement.style.setProperty('--primary-foreground', colors.primaryForeground)
+                setTheme(appearance.themeMode)
+            } else { Object.entries(originalColors.current).forEach(([key, value]) => document.documentElement.style.setProperty(key, value)); if (initialTheme.current) setTheme(initialTheme.current) }
+        }
+        // Capture the theme once for preview rollback.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+    useEffect(() => {
+        let active = true
+        getSettings().then(result => {
+            if (!active) return
+            if (result.needsLogin) { router.replace('/login'); return }
+            if (result.error || !result.data) { setError(result.error || '设置加载失败'); return }
+            setSettings(result.data); setSaved(result.data); currentSaved.current = result.data; setError('')
+        }).catch(() => { if (active) setError('设置加载失败，请重试。') }).finally(() => { if (active) setLoading(false) })
+        return () => { active = false }
+    }, [attempt, router])
+    useEffect(() => {
+        const unload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = '' } }
+        window.addEventListener('beforeunload', unload)
+        return () => window.removeEventListener('beforeunload', unload)
+    }, [dirty])
+    useEffect(() => {
+        const color = settings?.appearance.primaryColor
+        if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return
+        const colors = resolvedTheme === 'dark' ? generateDarkModePrimaryColors(color) : generatePrimaryColors(color)
+        document.documentElement.style.setProperty('--primary', colors.primary)
+        document.documentElement.style.setProperty('--primary-foreground', colors.primaryForeground)
+    }, [settings?.appearance.primaryColor, resolvedTheme])
+    function update<K extends keyof AllSettings>(section: K, patch: Partial<AllSettings[K]>) {
+        setSettings(current => current ? { ...current, [section]: { ...current[section], ...patch } } : current)
+    }
+    const save = async () => {
+        if (!settings || lock.current) return
+        if (!settings.site.name.trim() || !/^#[0-9a-f]{6}$/i.test(settings.appearance.primaryColor) || settings.links.slugLength < 1 || settings.links.slugLength > 30) { setError('请填写站点名称、有效 HEX 品牌色与 1–30 位短码长度。'); return }
+        if (settings.security.turnstileEnabled && (!settings.security.turnstileSiteKey.trim() || !settings.security.turnstileSecretKey.trim())) { setError('启用 Turnstile 需要 Site Key 与 Secret Key。'); return }
+        if (settings.security.safeBrowsingEnabled && !settings.security.safeBrowsingApiKey.trim()) { setError('启用 Safe Browsing 需要 API Key。'); return }
+        if (settings.data.autoCleanExpired && settings.data.expiredDays <= 0) { setError('过期天数必须大于 0。'); return }
+        lock.current = true; setSaving(true); setError('')
+        try {
+            const result = await saveSettings(settings)
+            if (result.error) { setError(result.error); return }
+            setSaved(settings); currentSaved.current = settings; toast.success('设置已保存'); router.refresh()
+        } catch { setError('保存失败，请重试。输入已保留。') }
+        finally { lock.current = false; setSaving(false) }
+    }
+    const exportLinks = async () => {
+        if (exporting) return
+        const notification = toast.loading('正在导出链接…')
         setExporting(true)
         try {
             const response = await fetch('/api/admin/export')
-            if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || 'Export failed')
-            }
-
-            // 获取文件名
-            const contentDisposition = response.headers.get('Content-Disposition')
-            const filenameMatch = contentDisposition?.match(/filename="(.+)"/)
-            const filename = filenameMatch ? filenameMatch[1] : `links_export_${new Date().toISOString().split('T')[0]}.csv`
-
-            // 下载文件
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = filename
-            document.body.appendChild(a)
-            a.click()
-            window.URL.revokeObjectURL(url)
-            document.body.removeChild(a)
-
-            toast.success("导出成功！")
-        } catch (error: any) {
-            console.error('Export error:', error)
-            toast.error(error.message || "导出失败，请稍后重试")
-        } finally {
-            setExporting(false)
-        }
+            if (!response.ok) throw new Error('导出失败')
+            const url = URL.createObjectURL(await response.blob())
+            const a = document.createElement('a'); a.href = url; a.download = `links-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url)
+            toast.success('链接已导出', { id: notification })
+        } catch { toast.error('导出失败，请重试。', { id: notification }) }
+        finally { setExporting(false) }
     }
-
-    // 清理过期链接
-    const handleClean = async () => {
-        if (!confirm("确定要删除所有已过期的链接吗？此操作不可撤销。")) {
-            return
-        }
-
-        setCleaning(true)
-        try {
-            const result = await cleanExpiredLinks()
-            if (result.error) {
-                toast.error(result.error)
-            } else {
-                toast.success(`成功清理了 ${result.count} 个过期链接`)
-            }
-        } catch (error) {
-            toast.error("清理失败，请稍后重试")
-        } finally {
-            setCleaning(false)
-        }
-    }
-
-    useEffect(() => {
-        async function loadSettings() {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-
-            if (!user) {
-                router.push("/login")
-                return
-            }
-
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', user.id)
-                .single()
-
-            if (profile?.role !== 'admin') {
-                router.push("/dashboard")
-                return
-            }
-
-            // 从数据库加载设置
-            const result = await getSettings()
-            if (result.data) {
-                const settings = result.data
-                // 站点配置
-                setSiteName(settings.site.name)
-                setSiteSubtitle(settings.site.subtitle || "下一代短链接生成器")
-                setSiteDescription(settings.site.description)
-                setSiteKeywords(settings.site.keywords || "短链接,URL Shortener,Link Management,Next.js")
-                setAuthorName(settings.site.authorName || "池鱼")
-                setAuthorUrl(settings.site.authorUrl || "https://chiyu.it")
-                setAllowPublicShorten(settings.site.allowPublicShorten)
-                setOpenRegistration(settings.site.openRegistration ?? true)
-                setAnnouncementEnabled(settings.announcement.enabled)
-                setAnnouncementContent(settings.announcement.content)
-                setAnnouncementType(settings.announcement.type)
-                setAnnouncementDuration(settings.announcement.duration || 5000)
-                // 链接设置
-                setSlugLength(settings.links.slugLength)
-                setDefaultExpiration(String(settings.links.defaultExpiration || 0))
-                setEnableClickStats(settings.links.enableClickStats)
-                // 外观设置
-                setPrimaryColor(settings.appearance.primaryColor)
-                setThemeMode(settings.appearance.themeMode)
-                setToastPosition(settings.appearance.toastPosition || "bottom-right")
-                // 数据管理
-                setAutoCleanExpired(settings.data.autoCleanExpired)
-                setExpiredDays(settings.data.expiredDays)
-                // 维护模式
-                setMaintenanceMode(settings.maintenance.enabled)
-                setMaintenanceMessage(settings.maintenance.message)
-                // 安全设置
-                setTurnstileEnabled(settings.security.turnstileEnabled)
-                setTurnstileSiteKey(settings.security.turnstileSiteKey)
-                setTurnstileSecretKey(settings.security.turnstileSecretKey)
-                setTurnstileAnonymousShortenEnabled(settings.security.turnstileAnonymousShortenEnabled ?? false)
-                setSafeBrowsingEnabled(settings.security.safeBrowsingEnabled ?? false)
-                setSafeBrowsingApiKey(settings.security.safeBrowsingApiKey ?? "")
-                setBlacklistSuffix(settings.security.blacklistSuffix ?? "")
-                setBlacklistDomain(settings.security.blacklistDomain ?? "")
-                setBlacklistSlug(settings.security.blacklistSlug ?? "")
-                setSkipAllChecks(settings.security.skipAllChecks ?? false)
-            }
-
-            setLoading(false)
-            setGlobalLoading(false)
-        }
-        loadSettings()
-    }, [router, setGlobalLoading])
-
-    // 同步当前实际主题到选择器
-    useEffect(() => {
-        if (theme) {
-            setThemeMode(theme as "light" | "dark" | "system")
-        }
-    }, [theme])
-
-    const handleSave = async () => {
-        // 验证短码长度
-        const safeSlugLength = slugLength === "" ? 0 : slugLength
-        if (safeSlugLength < 1 || safeSlugLength > 30) {
-            toast.error("参数错误", { description: "短码长度必须在 1-30 位之间" })
-            return
-        }
-
-        // 验证 Turnstile 配置
-        if (turnstileEnabled && (!turnstileSiteKey.trim() || !turnstileSecretKey.trim())) {
-            toast.error("配置不完整", { description: "启用 Turnstile 时必须填写 Site Key 和 Secret Key" })
-            return
-        }
-
-        // 验证自动清理配置
-        if (autoCleanExpired && (typeof expiredDays !== 'number' || expiredDays <= 0)) {
-            toast.error("配置错误", { description: "过期天数必须大于 0" })
-            return
-        }
-
-        // 验证 Safe Browsing 配置
-        if (safeBrowsingEnabled && !safeBrowsingApiKey.trim()) {
-            toast.error("配置不完整", { description: "启用 Google Safe Browsing 时必须填写 API Key" })
-            return
-        }
-
-        setSaving(true)
-
-        const settings: AllSettings = {
-            site: {
-                name: siteName,
-                subtitle: siteSubtitle,
-                description: siteDescription,
-                keywords: siteKeywords,
-                authorName: authorName,
-                authorUrl: authorUrl,
-                allowPublicShorten: allowPublicShorten,
-                openRegistration: openRegistration
-            },
-            links: {
-                slugLength: safeSlugLength,
-                enableClickStats: enableClickStats,
-                defaultExpiration: Number(defaultExpiration)
-            },
-            appearance: {
-                primaryColor: primaryColor,
-                themeMode: themeMode,
-                toastPosition: toastPosition as any
-            },
-            data: {
-                autoCleanExpired: autoCleanExpired,
-                expiredDays: typeof expiredDays === 'number' && expiredDays > 0 ? expiredDays : 90
-            },
-            maintenance: {
-                enabled: maintenanceMode,
-                message: maintenanceMessage
-            },
-            security: {
-                turnstileEnabled: turnstileEnabled,
-                turnstileSiteKey: turnstileSiteKey,
-                turnstileSecretKey: turnstileSecretKey,
-                turnstileAnonymousShortenEnabled: turnstileAnonymousShortenEnabled,
-                safeBrowsingEnabled: safeBrowsingEnabled,
-                safeBrowsingApiKey: safeBrowsingApiKey,
-                blacklistSuffix: blacklistSuffix,
-                blacklistDomain: blacklistDomain,
-                blacklistSlug: blacklistSlug,
-                skipAllChecks: skipAllChecks
-            },
-            announcement: {
-                enabled: announcementEnabled,
-                content: announcementContent,
-                type: announcementType,
-                duration: announcementDuration
-            }
-        }
-
-        const result = await saveSettings(settings)
-
-        if (result.error) {
-            toast.error("保存失败", { description: result.error })
-            setSaving(false)
-            return
-        }
-
-        toast.success("设置已保存", {
-            description: "页面将自动刷新以应用更改"
-        })
-
-        // 延迟刷新页面
-        setTimeout(() => {
-            window.location.reload()
-        }, 1000)
-    }
-
-    if (loading) {
-        return <SmartLoading />
-    }
-
-    return (
-        <div className="container mx-auto max-w-4xl px-4 py-8">
-            {/* 页面标题 */}
-            <div className="mb-8 flex flex-col items-start justify-between gap-4 border-b border-border/40 pb-6 md:flex-row md:items-center">
-                <FadeIn delay={0} className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                            setLoading(true)
-                            router.push("/admin")
-                        }}
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-foreground">系统设置</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">
-                            配置站点参数、链接规则和安全策略
-                        </p>
-                    </div>
-                </FadeIn>
+    const reset = () => { if (saved) { setSettings(saved); setTheme(saved.appearance.themeMode); setError(''); toast.success('已撤销未保存更改') } }
+    const back = () => { if (dirty) { setError('存在未保存更改，请先保存或撤销。'); return } router.push('/admin') }
+    return <Container className="pb-24"><PageHeader title="系统设置" back={<IconButton label="返回管理控制台" onClick={back}><ArrowLeft /></IconButton>} />
+        {loading || (!settings && error) ? <AsyncState error={error} onRetry={() => setAttempt(value => value + 1)} /> : settings && <>
+            <nav aria-label="设置分区" className="mb-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">{[['site', '站点'], ['links', '链接'], ['appearance', '外观'], ['security', '安全'], ['data', '数据'], ['maintenance', '维护']].map(([id, title]) => <a href={`#${id}`} key={id} className="text-muted-foreground hover:text-foreground focus-visible:underline">{title}</a>)}</nav>
+            <fieldset disabled={saving} className="min-w-0 space-y-6">
+                <Section id="site" title="站点">
+                    <FormInput id="site-name" label="站点名称" value={settings.site.name} onChange={e => update('site', { name: e.target.value })} />
+                    <FormInput id="site-subtitle" label="副标题" value={settings.site.subtitle} onChange={e => update('site', { subtitle: e.target.value })} />
+                    <FormInput id="site-description" label="描述" value={settings.site.description} onChange={e => update('site', { description: e.target.value })} />
+                    <FormInput id="site-keywords" label="关键词" value={settings.site.keywords} onChange={e => update('site', { keywords: e.target.value })} />
+                    <FormInput id="author-name" label="作者名称" value={settings.site.authorName} onChange={e => update('site', { authorName: e.target.value })} />
+                    <FormInput id="author-url" label="作者链接" value={settings.site.authorUrl} onChange={e => update('site', { authorUrl: e.target.value })} />
+                    <Toggle id="public-create" label="允许公开创建短链接" checked={settings.site.allowPublicShorten} onChange={value => update('site', { allowPublicShorten: value })} />
+                    <Toggle id="registration" label="开放注册" checked={settings.site.openRegistration} onChange={value => update('site', { openRegistration: value })} />
+                    <Toggle id="announcement" label="首页公告" checked={settings.announcement.enabled} onChange={value => update('announcement', { enabled: value })} />
+                    {settings.announcement.enabled && <>
+                        <FormField id="announcement-content" label="公告内容"><Textarea id="announcement-content" value={settings.announcement.content} onChange={e => update('announcement', { content: e.target.value })} /></FormField>
+                        <Options id="announcement-type" label="公告类型" value={settings.announcement.type} onChange={value => update('announcement', { type: value as AllSettings['announcement']['type'] })} options={[[ 'default', '默认' ], [ 'destructive', '危险' ], [ 'outline', '信息' ], [ 'secondary', '成功' ]]} />
+                        <FormInput id="announcement-duration" label="公告时长（毫秒）" type="number" min={2000} max={30000} step={1000} value={settings.announcement.duration} onChange={e => update('announcement', { duration: Number(e.target.value) })} />
+                    </>}
+                </Section>
+                <Section id="links" title="链接">
+                    <FormInput id="slug-length" label="默认短码长度" type="number" min={1} max={30} value={settings.links.slugLength} onChange={e => update('links', { slugLength: Number(e.target.value) })} />
+                    <Options id="default-expiration" label="默认有效期" value={String(settings.links.defaultExpiration)} onChange={value => update('links', { defaultExpiration: Number(value) })} options={[[ '0', '永不过期' ], [ '60', '1 小时' ], [ '1440', '24 小时' ], [ '10080', '7 天' ], [ '43200', '30 天' ]]} />
+                    <Toggle id="click-stats" label="记录点击统计" checked={settings.links.enableClickStats} onChange={value => update('links', { enableClickStats: value })} />
+                </Section>
+                <Section id="appearance" title="外观">
+                    <FormField id="brand-color" label="品牌色"><div className="flex items-center gap-2"><input id="brand-color" type="color" aria-label="品牌色" value={/^#[0-9a-f]{6}$/i.test(settings.appearance.primaryColor) ? settings.appearance.primaryColor : '#1a1a1f'} onChange={e => update('appearance', { primaryColor: e.target.value })} className="size-9 shrink-0 cursor-pointer" /><FormInput id="brand-hex" label="HEX" value={settings.appearance.primaryColor} onChange={e => update('appearance', { primaryColor: e.target.value })} /></div></FormField>
+                    <Options id="theme-mode" label="主题模式" value={settings.appearance.themeMode} onChange={value => { update('appearance', { themeMode: value as AllSettings['appearance']['themeMode'] }); setTheme(value) }} options={[[ 'light', '浅色' ], [ 'dark', '深色' ], [ 'system', '跟随系统' ]]} />
+                    <Options id="toast-position" label="通知位置" value={settings.appearance.toastPosition} onChange={value => update('appearance', { toastPosition: value as AllSettings['appearance']['toastPosition'] })} options={[[ 'top-right', '右上' ], [ 'top-center', '顶部居中' ], [ 'bottom-right', '右下' ], [ 'bottom-center', '底部居中' ]]} />
+                </Section>
+                <Section id="security" title="安全">
+                    <Toggle id="turnstile-enabled" label="启用 Turnstile" checked={settings.security.turnstileEnabled} onChange={value => update('security', { turnstileEnabled: value })} />
+                    <Toggle id="anonymous-captcha" label="匿名创建需要验证" checked={settings.security.turnstileAnonymousShortenEnabled} onChange={value => update('security', { turnstileAnonymousShortenEnabled: value })} disabled={!settings.security.turnstileEnabled || !settings.site.allowPublicShorten} />
+                    <FormInput id="turnstile-site-key" label="Site Key" value={settings.security.turnstileSiteKey} onChange={e => update('security', { turnstileSiteKey: e.target.value })} />
+                    <FormInput id="turnstile-secret" label="Secret Key" type="password" autoComplete="new-password" value={settings.security.turnstileSecretKey} onChange={e => update('security', { turnstileSecretKey: e.target.value })} />
+                    <Toggle id="safe-browsing" label="Google Safe Browsing" checked={settings.security.safeBrowsingEnabled} onChange={value => update('security', { safeBrowsingEnabled: value })} />
+                    <FormInput id="safe-browsing-key" label="API Key" type="password" autoComplete="new-password" value={settings.security.safeBrowsingApiKey} onChange={e => update('security', { safeBrowsingApiKey: e.target.value })} />
+                    <FormField id="blacklist-suffix" label="后缀黑名单"><Textarea id="blacklist-suffix" value={settings.security.blacklistSuffix} onChange={e => update('security', { blacklistSuffix: e.target.value })} /></FormField>
+                    <FormField id="blacklist-domain" label="域名黑名单"><Textarea id="blacklist-domain" value={settings.security.blacklistDomain} onChange={e => update('security', { blacklistDomain: e.target.value })} /></FormField>
+                    <FormField id="blacklist-slug" label="短码黑名单"><Textarea id="blacklist-slug" value={settings.security.blacklistSlug} onChange={e => update('security', { blacklistSlug: e.target.value })} /></FormField>
+                    <div className="text-destructive"><Toggle id="skip-checks" label="跳过全部安全检查" checked={settings.security.skipAllChecks} onChange={value => update('security', { skipAllChecks: value })} /><p className="text-xs">开启后不会执行安全检测。</p></div>
+                </Section>
+                <Section id="data" title="数据">
+                    <Toggle id="auto-clean" label="自动清理" checked={settings.data.autoCleanExpired} onChange={value => update('data', { autoCleanExpired: value })} />
+                    <FormInput id="expired-days" label="过期天数" type="number" min={1} value={settings.data.expiredDays} onChange={e => update('data', { expiredDays: Number(e.target.value) })} />
+                    <div className="flex flex-wrap gap-2 md:col-span-2"><LoadingButton variant="outline" loading={exporting} icon={<Download />} onClick={exportLinks}>导出全部链接</LoadingButton><Button variant="destructive" onClick={() => setCleanOpen(true)}><Trash2 />清理过期链接</Button></div>
+                </Section>
+                <Section id="maintenance" title="维护">
+                    <Toggle id="maintenance-enabled" label="维护模式" checked={settings.maintenance.enabled} onChange={value => update('maintenance', { enabled: value })} />
+                    <FormField id="maintenance-message" label="维护消息"><Textarea id="maintenance-message" value={settings.maintenance.message} onChange={e => update('maintenance', { message: e.target.value })} /></FormField>
+                </Section>
+            </fieldset>
+            {error && <p role="alert" className="my-4 break-words text-destructive">{error}</p>}
+            <div className="sticky bottom-0 mt-6 flex flex-wrap items-center justify-between gap-3 border-t bg-background py-3">
+                <span role="status" className="text-sm text-muted-foreground">{dirty ? '存在未保存更改' : '已保存'}</span>
+                <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={!dirty || saving} onClick={reset}><RotateCcw />撤销更改</Button><LoadingButton loading={saving} disabled={!dirty} onClick={save} icon={<Save />}>保存全部设置</LoadingButton></div>
             </div>
-
-            <div className="space-y-6">
-                {/* 站点配置 */}
-                <FadeIn delay={0.1}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                                    <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>站点配置</CardTitle>
-                                    <CardDescription>基本站点信息和公开访问设置</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="siteName">站点名称</Label>
-                                    </div>
-                                    <Input
-                                        id="siteName"
-                                        value={siteName}
-                                        onChange={(e) => setSiteName(e.target.value)}
-                                        placeholder="输入站点名称"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <MessageSquareQuote className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="siteSubtitle">副标题</Label>
-                                    </div>
-                                    <Input
-                                        id="siteSubtitle"
-                                        value={siteSubtitle}
-                                        onChange={(e) => setSiteSubtitle(e.target.value)}
-                                        placeholder="如: 下一代短链接生成器"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <div className="flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="siteDescription">站点描述</Label>
-                                    </div>
-                                    <Input
-                                        id="siteDescription"
-                                        value={siteDescription}
-                                        onChange={(e) => setSiteDescription(e.target.value)}
-                                        placeholder="输入站点描述"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <div className="flex items-center gap-2">
-                                        <Tags className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="siteKeywords">站点关键词</Label>
-                                    </div>
-                                    <Input
-                                        id="siteKeywords"
-                                        value={siteKeywords}
-                                        onChange={(e) => setSiteKeywords(e.target.value)}
-                                        placeholder="多个关键词用逗号分隔"
-                                        autoComplete="off"
-                                    />
-                                    <p className="text-xs text-muted-foreground">多个关键词请用英文逗号分隔</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <User className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="authorName">作者名称</Label>
-                                    </div>
-                                    <Input
-                                        id="authorName"
-                                        value={authorName}
-                                        onChange={(e) => setAuthorName(e.target.value)}
-                                        placeholder="输入作者名称"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <IconLink className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="authorUrl">作者链接</Label>
-                                    </div>
-                                    <Input
-                                        id="authorUrl"
-                                        value={authorUrl}
-                                        onChange={(e) => setAuthorUrl(e.target.value)}
-                                        placeholder="输入作者个人主页链接"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <UserPlus className="h-4 w-4 text-muted-foreground" />
-                                        <Label>开放用户注册</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        允许新用户注册账号
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={openRegistration}
-                                    onCheckedChange={setOpenRegistration}
-                                />
-                            </div>
-
-                            {/* 公告设置 */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Megaphone className="h-4 w-4" />
-                                        <Label>公告弹窗</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        启用后将在首页向用户展示公告
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={announcementEnabled}
-                                    onCheckedChange={setAnnouncementEnabled}
-                                />
-                            </div>
-                            {announcementEnabled && (
-                                <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <AlignLeft className="h-4 w-4 text-muted-foreground" />
-                                            <Label htmlFor="announcementContent">公告内容</Label>
-                                        </div>
-                                        <Textarea
-                                            id="announcementContent"
-                                            value={announcementContent}
-                                            onChange={(e) => setAnnouncementContent(e.target.value)}
-                                            placeholder="输入公告内容"
-                                            className="min-h-20"
-                                        />
-                                    </div>
-
-                                    <div className="grid gap-6 md:grid-cols-2 bg-muted/30 p-4 rounded-lg">
-                                        <div className="space-y-3">
-                                            <div className="flex items-center gap-2 h-5">
-                                                <Palette className="h-4 w-4 text-muted-foreground" />
-                                                <Label>公告类型</Label>
-                                            </div>
-                                            <Select value={announcementType} onValueChange={(v: any) => setAnnouncementType(v)}>
-                                                <SelectTrigger className="bg-background">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="default">默认 (蓝色/火箭)</SelectItem>
-                                                    <SelectItem value="destructive">警告 (红色/警示)</SelectItem>
-                                                    <SelectItem value="outline">提示 (边框/信息)</SelectItem>
-                                                    <SelectItem value="secondary">次要 (灰色/打钩)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between h-5">
-                                                <div className="flex items-center gap-2">
-                                                    <Clock className="h-4 w-4 text-muted-foreground" />
-                                                    <Label>显示时长</Label>
-                                                </div>
-                                                <span className="text-sm font-mono bg-background px-2 py-0.5 rounded border text-muted-foreground">{announcementDuration / 1000}s</span>
-                                            </div>
-                                            <div className="flex items-center h-10 px-1">
-                                                <Input
-                                                    type="range"
-                                                    value={announcementDuration}
-                                                    onChange={(e) => setAnnouncementDuration(Number(e.target.value))}
-                                                    min={2000}
-                                                    max={30000}
-                                                    step={1000}
-                                                    className="cursor-pointer"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-
-                {/* 链接设置 */}
-                <FadeIn delay={0.2}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                                    <Link2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>链接设置</CardTitle>
-                                    <CardDescription>短链接生成规则和统计功能</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                                        <Label>启用点击统计</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        记录每个链接的点击次数和访问数据
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={enableClickStats}
-                                    onCheckedChange={setEnableClickStats}
-                                />
-                            </div>
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <Ruler className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="slugLength">默认短码长度</Label>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <Input
-                                            id="slugLength"
-                                            type="number"
-                                            min={1}
-                                            max={30}
-                                            value={slugLength}
-                                            onChange={(e) => {
-                                                const value = e.target.value
-                                                if (value === "") {
-                                                    setSlugLength("")
-                                                } else {
-                                                    setSlugLength(Number(value))
-                                                }
-                                            }}
-                                            className="w-24"
-                                            autoComplete="off"
-                                        />
-                                        <span className="text-sm text-muted-foreground">字符 (1-30)</span>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <Clock className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="defaultExpiration">默认有效期</Label>
-                                    </div>
-                                    <Select value={defaultExpiration} onValueChange={setDefaultExpiration}>
-                                        <SelectTrigger className="w-45">
-                                            <SelectValue placeholder="选择默认有效期" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="0">永不过期</SelectItem>
-                                            <SelectItem value="60">1 小时</SelectItem>
-                                            <SelectItem value="1440">24 小时</SelectItem>
-                                            <SelectItem value="10080">7 天</SelectItem>
-                                            <SelectItem value="43200">30 天</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <p className="text-sm text-muted-foreground">创建新链接时预设的过期时间</p>
-                                </div>
-                            </div>
-
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-
-                {/* 外观设置 */}
-                <FadeIn delay={0.3}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-100 dark:bg-pink-900/30">
-                                    <Palette className="h-5 w-5 text-pink-600 dark:text-pink-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>外观设置</CardTitle>
-                                    <CardDescription>自定义站点主题和配色方案</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {/* 主题色选择 */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Paintbrush className="h-4 w-4 text-muted-foreground" />
-                                        <Label>主题色</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        自定义站点的主色调
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Input
-                                        value={primaryColor}
-                                        onChange={(e) => {
-                                            const color = e.target.value
-                                            setPrimaryColor(color)
-                                            // 验证是否为有效的 HEX 颜色
-                                            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                                                const colors = generatePrimaryColors(color)
-                                                document.documentElement.style.setProperty('--primary', colors.primary)
-                                                document.documentElement.style.setProperty('--primary-foreground', colors.primaryForeground)
-                                            }
-                                        }}
-                                        className="w-24 font-mono text-sm"
-                                        placeholder="#1a1a1f"
-                                    />
-                                    <label className="relative cursor-pointer">
-                                        <div
-                                            className="h-10 w-10 rounded-lg border-2 border-border hover:border-foreground/50 transition-colors cursor-pointer"
-                                            style={{ backgroundColor: primaryColor }}
-                                        />
-                                        <input
-                                            type="color"
-                                            value={primaryColor}
-                                            onChange={(e) => {
-                                                const color = e.target.value
-                                                setPrimaryColor(color)
-                                                // 实时预览主题色
-                                                const colors = generatePrimaryColors(color)
-                                                document.documentElement.style.setProperty('--primary', colors.primary)
-                                                document.documentElement.style.setProperty('--primary-foreground', colors.primaryForeground)
-                                            }}
-                                            className="absolute inset-0 opacity-0 cursor-pointer"
-                                        />
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* 主题模式选择 */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Moon className="h-4 w-4 text-muted-foreground" />
-                                        <Label>主题模式</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {
-                                            themeMode === 'light' ? '始终使用浅色主题' :
-                                                themeMode === 'dark' ? '始终使用深色主题' :
-                                                    '根据系统设置自动切换'
-                                        }
-                                    </p>
-                                </div>
-                                <Select value={themeMode} onValueChange={(value) => {
-                                    const mode = value as "light" | "dark" | "system"
-                                    setThemeMode(mode)
-                                    setTheme(mode) // 立即切换主题
-                                }}>
-                                    <SelectTrigger className="w-35">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="light">
-                                            <div className="flex items-center gap-2">
-                                                <span>☀️</span>
-                                                <span>浅色模式</span>
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="dark">
-                                            <div className="flex items-center gap-2">
-                                                <span>🌙</span>
-                                                <span>深色模式</span>
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="system">
-                                            <div className="flex items-center gap-2">
-                                                <span>💻</span>
-                                                <span>跟随系统</span>
-                                            </div>
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Toast 位置设置 */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Bell className="h-4 w-4 text-muted-foreground" />
-                                        <Label>通知弹窗位置</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        设置全局 Toast 通知的弹出位置
-                                    </p>
-                                </div>
-                                <Select value={toastPosition} onValueChange={setToastPosition}>
-                                    <SelectTrigger className="w-45">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="top-right">右上角 (Top Right)</SelectItem>
-                                        <SelectItem value="top-center">顶部居中 (Top Center)</SelectItem>
-                                        <SelectItem value="bottom-right">右下角 (Bottom Right)</SelectItem>
-                                        <SelectItem value="bottom-center">底部居中 (Bottom Center)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-
-                {/* 数据管理 */}
-                <FadeIn delay={0.35}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-900/30">
-                                    <Database className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>数据管理</CardTitle>
-                                    <CardDescription>链接数据清理和导出设置</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                        <Label>自动清理过期链接</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        定期删除长时间无点击的链接
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={autoCleanExpired}
-                                    onCheckedChange={setAutoCleanExpired}
-                                />
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-4">
-                                {autoCleanExpired && (
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                                            <Label htmlFor="expiredDays" className="whitespace-nowrap">过期天数</Label>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                id="expiredDays"
-                                                type="number"
-                                                min={1}
-                                                value={expiredDays}
-                                                onChange={(e) => {
-                                                    const val = e.target.value
-                                                    if (val === "") {
-                                                        setExpiredDays("")
-                                                        return
-                                                    }
-                                                    const num = parseInt(val)
-                                                    if (!isNaN(num) && num > 0) {
-                                                        setExpiredDays(num)
-                                                    }
-                                                }}
-                                                onBlur={() => {
-                                                    if (expiredDays === "" || expiredDays <= 0) {
-                                                        setExpiredDays(90)
-                                                        toast.error("过期天数必须大于 0")
-                                                    }
-                                                }}
-                                                className="w-24 h-9"
-                                                autoComplete="off"
-                                            />
-                                            <span className="text-sm text-muted-foreground whitespace-nowrap">天</span>
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleExport}
-                                        disabled={exporting}
-                                    >
-                                        {exporting ? (
-                                            <>
-                                                <LoaderCircle className="mr-2 h-3 w-3 animate-spin" />
-                                                导出中...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Download className="mr-2 h-4 w-4" />
-                                                导出所有链接
-                                            </>
-                                        )}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30"
-                                        onClick={handleClean}
-                                        disabled={cleaning}
-                                    >
-                                        {cleaning ? (
-                                            <>
-                                                <LoaderCircle className="mr-2 h-3 w-3 animate-spin" />
-                                                清理中...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Trash className="mr-2 h-4 w-4" />
-                                                清理已过期链接
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-
-                {/* 维护模式 */}
-                <FadeIn delay={0.4}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                                    <Wrench className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>维护模式</CardTitle>
-                                    <CardDescription>临时关闭服务进行维护</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Power className="h-4 w-4 text-muted-foreground" />
-                                        <Label>启用维护模式</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        开启后用户将无法访问短链接服务
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={maintenanceMode}
-                                    onCheckedChange={setMaintenanceMode}
-                                />
-                            </div>
-                            {maintenanceMode && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <MessageSquareWarning className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="maintenanceMessage">维护公告</Label>
-                                    </div>
-                                    <Input
-                                        id="maintenanceMessage"
-                                        value={maintenanceMessage}
-                                        onChange={(e) => setMaintenanceMessage(e.target.value)}
-                                        placeholder="输入向用户展示的维护信息..."
-                                        autoComplete="off"
-                                    />
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-
-                {/* 安全设置 */}
-                <FadeIn delay={0.45}>
-                    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        <CardHeader>
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
-                                    <Shield className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div>
-                                    <CardTitle>安全设置</CardTitle>
-                                    <CardDescription>人机验证与链接安全检测配置</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {/* Turnstile 人机验证 */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <Bot className="h-4 w-4 text-muted-foreground" />
-                                        <Label>启用注册人机验证</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        开启后用户注册时需要完成 Turnstile 验证
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={turnstileEnabled}
-                                    onCheckedChange={setTurnstileEnabled}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <IconLink className="h-4 w-4 text-muted-foreground" />
-                                        <Label>启用匿名创建人机验证</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        开启后未登录用户创建短链接时需要完成 Turnstile 验证
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={turnstileAnonymousShortenEnabled}
-                                    onCheckedChange={setTurnstileAnonymousShortenEnabled}
-                                    disabled={!turnstileEnabled || !allowPublicShorten}
-                                />
-                            </div>
-                            {turnstileEnabled && (
-                                <>
-                                    <div className="grid gap-6 md:grid-cols-2">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <Key className="h-4 w-4 text-muted-foreground" />
-                                                <Label htmlFor="turnstileSiteKey">Site Key</Label>
-                                            </div>
-                                            <Input
-                                                id="turnstileSiteKey"
-                                                value={turnstileSiteKey}
-                                                onChange={(e) => setTurnstileSiteKey(e.target.value)}
-                                                placeholder="从 Cloudflare 控制台获取 Site Key"
-                                                autoComplete="off"
-                                            />
-                                            <p className="text-xs text-muted-foreground">前端渲染验证组件时使用</p>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <Lock className="h-4 w-4 text-muted-foreground" />
-                                                <Label htmlFor="turnstileSecretKey">Secret Key</Label>
-                                            </div>
-                                            <Input
-                                                id="turnstileSecretKey"
-                                                type="password"
-                                                value={turnstileSecretKey}
-                                                onChange={(e) => setTurnstileSecretKey(e.target.value)}
-                                                placeholder="从 Cloudflare 控制台获取 Secret Key"
-                                                autoComplete="off"
-                                            />
-                                            <p className="text-xs text-muted-foreground">后端验证 token 时使用，请妥善保管</p>
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* 分隔线 */}
-                            <div className="border-t my-2" />
-
-                            {/* Google Safe Browsing */}
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                        <ShieldAlert className="h-4 w-4 text-muted-foreground" />
-                                        <Label>启用 Google Safe Browsing</Label>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        创建短链接时检测目标 URL 是否为恶意网址
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={safeBrowsingEnabled}
-                                    onCheckedChange={setSafeBrowsingEnabled}
-                                />
-                            </div>
-                            {safeBrowsingEnabled && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <KeyRound className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="safeBrowsingApiKey">API Key</Label>
-                                    </div>
-                                    <Input
-                                        id="safeBrowsingApiKey"
-                                        type="password"
-                                        value={safeBrowsingApiKey}
-                                        onChange={(e) => setSafeBrowsingApiKey(e.target.value)}
-                                        placeholder="从 Google Cloud Console 获取 API Key"
-                                        autoComplete="off"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        在 <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google Cloud Console</a> 创建 API Key 并启用 Safe Browsing API
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* 分隔线 */}
-                            <div className="border-t my-2" />
-
-                            {/* 黑名单设置 */}
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <FileWarning className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="blacklistSuffix">后缀黑名单</Label>
-                                    </div>
-                                    <Textarea
-                                        id="blacklistSuffix"
-                                        value={blacklistSuffix}
-                                        onChange={(e) => setBlacklistSuffix(e.target.value)}
-                                        placeholder=".exe, .apk, .bat"
-                                        className="font-mono text-sm"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        禁止缩短以此类后缀结尾的链接，多个后缀用英文逗号分隔
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <GlobeLock className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="blacklistDomain">域名黑名单</Label>
-                                    </div>
-                                    <Textarea
-                                        id="blacklistDomain"
-                                        value={blacklistDomain}
-                                        onChange={(e) => setBlacklistDomain(e.target.value)}
-                                        placeholder="example.com, malicious-site.net"
-                                        className="font-mono text-sm"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        禁止缩短包含这些域名的链接，多个域名用英文逗号分隔
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <Ban className="h-4 w-4 text-muted-foreground" />
-                                        <Label htmlFor="blacklistSlug">自定义后缀黑名单</Label>
-                                    </div>
-                                    <Textarea
-                                        id="blacklistSlug"
-                                        value={blacklistSlug}
-                                        onChange={(e) => setBlacklistSlug(e.target.value)}
-                                        placeholder="admin, login, api, dashboard"
-                                        className="font-mono text-sm"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        禁止用户使用这些自定义后缀，多个后缀用英文逗号分隔
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* 分隔线 */}
-                            <div className="border-t my-2" />
-
-                            {/* 跳过检查 */}
-                            <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900/30 p-4">
-                                <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                                        <AlertTriangle className="h-4 w-4" />
-                                        <Label className="text-red-600 dark:text-red-400">设置跳过所有检查</Label>
-                                    </div>
-                                    <p className="text-sm text-red-600/80 dark:text-red-400/80">
-                                        危险：开启后将跳过所有安全检查（Safe Browsing、黑名单等），仅用于特殊场景
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={skipAllChecks}
-                                    onCheckedChange={setSkipAllChecks}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </FadeIn>
-            </div>
-            {/* 固定在右下角的保存按钮 */}
-            <FadeIn delay={0.5}>
-                <div className="fixed bottom-8 right-8">
-                    <Button
-                        onClick={handleSave}
-                        size="lg"
-                        className="shadow-lg group"
-                        disabled={saving}
-                    >
-                        {saving ? (
-                            <>
-                                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                                保存中...
-                            </>
-                        ) : (
-                            <>
-                                <span className="relative mr-2 w-4 h-4 inline-flex items-center justify-center">
-                                    <Save className="absolute h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] group-hover:opacity-0 group-hover:scale-50" />
-                                    <Check className="absolute h-4 w-4 transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100" />
-                                </span>
-                                保存所有设置
-                            </>
-                        )}
-                    </Button>
-                </div>
-            </FadeIn>
-        </div>
-    )
+            <ConfirmDeleteDialog open={cleanOpen} onOpenChange={setCleanOpen} object="所有过期链接" onConfirm={async () => { const result = await cleanExpiredLinks(); if (result.error) { toast.error(result.error); return false } toast.success(`已清理 ${result.count || 0} 条链接`); return true }} />
+        </>}
+    </Container>
 }

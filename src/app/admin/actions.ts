@@ -147,13 +147,13 @@ export async function getSettings(): Promise<{ data?: AllSettings, error?: strin
     // 返回设置，使用统一的默认值
     return {
         data: {
-            site: (settingsMap.site as SiteSettings) || defaultSiteSettings,
-            links: (settingsMap.links as LinksSettings) || defaultLinksSettings,
-            appearance: (settingsMap.appearance as AppearanceSettings) || defaultAppearanceSettings,
-            data: (settingsMap.data as DataSettings) || defaultDataSettings,
-            maintenance: (settingsMap.maintenance as MaintenanceSettings) || defaultMaintenanceSettings,
-            security: (settingsMap.security as SecuritySettings) || defaultSecuritySettings,
-            announcement: (settingsMap.announcement as AnnouncementConfig) || defaultAnnouncementConfig
+            site: { ...defaultSiteSettings, ...(settingsMap.site as Partial<SiteSettings>) },
+            links: { ...defaultLinksSettings, ...(settingsMap.links as Partial<LinksSettings>) },
+            appearance: { ...defaultAppearanceSettings, ...(settingsMap.appearance as Partial<AppearanceSettings>) },
+            data: { ...defaultDataSettings, ...(settingsMap.data as Partial<DataSettings>) },
+            maintenance: { ...defaultMaintenanceSettings, ...(settingsMap.maintenance as Partial<MaintenanceSettings>) },
+            security: { ...defaultSecuritySettings, ...(settingsMap.security as Partial<SecuritySettings>) },
+            announcement: { ...defaultAnnouncementConfig, ...(settingsMap.announcement as Partial<AnnouncementConfig>) }
         }
     }
 }
@@ -190,20 +190,13 @@ export async function saveSettings(settings: AllSettings): Promise<{ success?: b
         { key: 'announcement', value: settings.announcement }
     ]
 
-    for (const update of updates) {
-        const { error } = await supabase
-            .from('settings')
-            .upsert(
-                { key: update.key, value: update.value, updated_at: new Date().toISOString() },
-                { onConflict: 'key' }
-            )
+    const { error } = await supabase.from('settings').upsert(
+        updates.map(update => ({ ...update, updated_at: new Date().toISOString() })),
+        { onConflict: 'key' }
+    )
+    if (error) return { error: getFriendlyErrorMessage(error) }
 
-        if (error) {
-            return { error: getFriendlyErrorMessage(error) }
-        }
-    }
-
-    revalidatePath('/admin/settings')
+    revalidatePath('/', 'layout')
     return { success: true }
 }
 

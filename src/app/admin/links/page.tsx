@@ -1,9 +1,14 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import type { Link } from "@/app/dashboard/links-table"
+import type { LinkSummary as Link } from '@/lib/link-model'
+import { getLinksConfig } from '@/lib/site-config'
 import { AdminLinksClient } from "./admin-links-client"
+import { hasSupabaseConfig, SUPABASE_CONFIG_ERROR } from '@/lib/supabase-config'
 
 export default async function AdminLinksPage() {
+    if (!hasSupabaseConfig()) {
+        return <section className="mx-auto flex min-h-[60dvh] max-w-lg flex-col items-center justify-center gap-3 px-4 text-center"><h1 className="text-xl font-semibold">管理员功能不可用</h1><p className="text-sm text-muted-foreground">{SUPABASE_CONFIG_ERROR}</p></section>
+    }
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -21,11 +26,13 @@ export default async function AdminLinksPage() {
         redirect("/dashboard")
     }
 
-    const { data: allLinks } = await supabase
+    const { data: allLinks, error: queryError } = await supabase
         .from('links')
         .select('*')
         .order('created_at', { ascending: false })
 
+    if (queryError) throw new Error('链接列表加载失败')
+    const settings = await getLinksConfig()
     const normalized: Link[] = (allLinks || []).flatMap(row => {
         const r = row as Record<string, unknown>
         const idRaw = r.id
@@ -48,10 +55,12 @@ export default async function AdminLinksPage() {
                 created_at,
                 expires_at: typeof r.expires_at === 'string' ? r.expires_at : r.expires_at == null ? null : String(r.expires_at),
                 clicks: Number.isFinite(clicks) ? clicks : 0,
+                password_type: typeof r.password_type === 'string' ? r.password_type : 'none',
+                user_id: typeof r.user_id === 'string' ? r.user_id : null,
                 user_email: typeof r.user_email === 'string' ? r.user_email : undefined,
             }
         ]
     })
 
-    return <AdminLinksClient links={normalized} />
+    return <AdminLinksClient links={normalized} viewerId={user.id} showClickStats={settings.enableClickStats} />
 }

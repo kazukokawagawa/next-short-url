@@ -5,18 +5,15 @@ import { Button, ButtonProps } from "@/components/ui/button"
 export interface LoadingButtonProps extends ButtonProps {
     loading?: boolean
     icon?: React.ReactNode
-    isHovered?: boolean
 }
 
 export const LoadingButton = React.forwardRef<HTMLButtonElement, LoadingButtonProps>(
-    ({ loading, children, disabled, icon, isHovered, ...props }, ref) => {
+    ({ loading, children, disabled, icon, ...props }, ref) => {
         return (
-            <Button ref={ref} disabled={loading || disabled} {...props}>
-                {loading ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                    icon
-                )}
+            <Button ref={ref} {...props} disabled={loading || disabled} aria-busy={loading || undefined}>
+                <span aria-hidden="true" className="inline-flex size-4 shrink-0 items-center justify-center">
+                    {loading ? <LoaderCircle className="size-4 animate-spin" /> : icon}
+                </span>
                 {children}
             </Button>
         )

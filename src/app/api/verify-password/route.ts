@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createPublicSupabaseClient } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 
 export async function POST(request: NextRequest) {
+    const supabase = createPublicSupabaseClient()
+    if (!supabase) return NextResponse.json({ error: '服务暂未配置' }, { status: 503 })
     const { slug, password } = await request.json()
 
     // 获取请求者 IP
@@ -28,7 +30,6 @@ export async function POST(request: NextRequest) {
     if (link.expires_at) {
         const isExpired = new Date(link.expires_at) < new Date()
         if (isExpired) {
-            await supabase.from('links').delete().eq('id', link.id)
             return NextResponse.json({ error: '链接已过期' }, { status: 410 })
         }
     }
@@ -41,13 +42,14 @@ export async function POST(request: NextRequest) {
 
     // 检查 IP 失败次数（最近1小时内）
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const { count: failCount } = await supabase
+    const { count: failCount, error: attemptsError } = await supabase
         .from('password_attempts')
         .select('*', { count: 'exact', head: true })
         .eq('ip_address', ip)
         .eq('slug', slug)
         .gte('attempted_at', oneHourAgo)
 
+    if (attemptsError) return NextResponse.json({ error: '验证服务暂时不可用，请稍后重试' }, { status: 503 })
     if (failCount !== null && failCount >= 5) {
         return NextResponse.json({
             error: '尝试次数过多，请1小时后再试',
@@ -60,11 +62,12 @@ export async function POST(request: NextRequest) {
 
     if (!isValid) {
         // 记录失败尝试
-        await supabase.from('password_attempts').insert({
+        const { error: recordError } = await supabase.from('password_attempts').insert({
             ip_address: ip,
             slug: slug
         })
 
+        if (recordError) return NextResponse.json({ error: '验证服务暂时不可用，请稍后重试' }, { status: 503 })
         const remaining = 5 - ((failCount ?? 0) + 1)
         return NextResponse.json({
             error: remaining > 0 ? `密码错误，还剩 ${remaining} 次机会` : '密码错误，已无剩余机会',

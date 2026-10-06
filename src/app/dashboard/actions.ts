@@ -109,6 +109,9 @@ export async function createLink(formData: FormData) {
         }
     }
 
+    const passwordResult = await processLinkPassword(formData.get('passwordType') as string || 'none', formData.get('password') as string || '')
+    if (passwordResult.error) return { error: passwordResult.error }
+
     const { error } = await supabase
         .from('links')
         .insert({
@@ -119,12 +122,7 @@ export async function createLink(formData: FormData) {
             is_no_index: isNoIndex,
             expires_at: formData.get('expiresAt') as string || null,
             password_type: formData.get('passwordType') as string || 'none',
-            password_hash: await (async () => {
-                const passwordType = formData.get('passwordType') as string
-                const password = formData.get('password') as string
-                const result = await processLinkPassword(passwordType, password)
-                return result.hash
-            })()
+            password_hash: passwordResult.hash
         })
 
     if (error) {

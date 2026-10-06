@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 import { createClient } from "@/utils/supabase/server"
-import { getFriendlyErrorMessage } from "@/utils/error-mapping" // 1. 引入
+import { getFriendlyErrorMessage } from "@/utils/error-mapping"
+import { getSiteSettings } from "@/app/dashboard/settings-actions"
 
 export async function login(formData: FormData) {
     const supabase = await createClient()
@@ -51,6 +52,10 @@ export async function signup(formData: FormData) {
 
     const origin = (await headers()).get("origin")
 
+    const siteConfig = await getSiteSettings()
+    if (siteConfig.error) return { error: '注册配置暂不可用，请稍后重试' }
+    if (!siteConfig.openRegistration) return { error: "暂未开放用户注册" }
+
     // 检查是否需要验证 Turnstile
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
         const { createClient: createAdminClient } = await import('@supabase/supabase-js')
@@ -73,16 +78,6 @@ export async function signup(formData: FormData) {
 
         const security = securitySetting?.value
 
-        // 1.5 检查是否允许注册
-        const { data: siteSetting } = await supabaseAdmin
-            .from('settings')
-            .select('value')
-            .eq('key', 'site')
-            .single()
-
-        if (siteSetting?.value?.openRegistration === false) {
-            return { error: "暂未开放用户注册" }
-        }
 
         // 如果启用了 Turnstile 验证
         if (security?.turnstileEnabled && security?.turnstileSecretKey) {
@@ -152,7 +147,7 @@ export async function signup(formData: FormData) {
             console.error('SUPABASE_SERVICE_ROLE_KEY is not configured. Profile creation skipped.')
             console.error('Please add SUPABASE_SERVICE_ROLE_KEY to your .env.local file')
             // 不阻止注册流程，只是跳过 profile 创建
-            return { success: true }
+            return { success: true, sessionReady: Boolean(data.session) }
         }
 
         try {
@@ -189,5 +184,5 @@ export async function signup(formData: FormData) {
         }
     }
 
-    return { success: true }
+    return { success: true, sessionReady: Boolean(data.session) }
 }

@@ -45,13 +45,13 @@ function getStrengthInfo(strength: number): { color: string; label: string; bgCo
         case 0:
             return { color: 'bg-muted', label: '', bgColor: 'bg-muted' }
         case 1:
-            return { color: 'bg-red-500', label: '弱', bgColor: 'bg-red-500/20' }
+            return { color: 'bg-destructive', label: '弱', bgColor: 'bg-destructive/20' }
         case 2:
-            return { color: 'bg-orange-500', label: '一般', bgColor: 'bg-orange-500/20' }
+            return { color: 'bg-warning', label: '一般', bgColor: 'bg-warning/20' }
         case 3:
-            return { color: 'bg-yellow-500', label: '中等', bgColor: 'bg-yellow-500/20' }
+            return { color: 'bg-info', label: '中等', bgColor: 'bg-info/20' }
         case 4:
-            return { color: 'bg-green-500', label: '强', bgColor: 'bg-green-500/20' }
+            return { color: 'bg-success', label: '强', bgColor: 'bg-success/20' }
         default:
             return { color: 'bg-muted', label: '', bgColor: 'bg-muted' }
     }

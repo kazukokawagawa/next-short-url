@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createPublicSupabaseClient } from '@/lib/supabase'
 
 // 强制动态渲染，防止 Next.js 静态缓存
 export const dynamic = 'force-dynamic'
@@ -9,23 +9,24 @@ export async function GET(
     { params }: { params: Promise<{ slug: string }> }
 ) {
     const { slug } = await params
+    const supabase = createPublicSupabaseClient()
+    if (!supabase) return NextResponse.json({ error: '服务暂未配置' }, { status: 503 })
 
     // 1. 查询链接（包含密码字段）
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('links')
         .select('id, original_url, expires_at, password_type, password_hash')
         .eq('slug', slug)
         .single()
+
+    if (error && error.code !== 'PGRST116') return NextResponse.json({ error: '服务暂时不可用' }, { status: 503 })
 
     if (data?.original_url) {
         // 检查是否过期
         if (data.expires_at) {
             const isExpired = new Date(data.expires_at) < new Date()
             if (isExpired) {
-                // 已过期，直接删除
-                await supabase.from('links').delete().eq('id', data.id)
-                // 返回首页 (或友好的过期页面)
-                return NextResponse.redirect(new URL('/', request.url))
+                return NextResponse.redirect(new URL('/link-expired', request.url))
             }
         }
 
@@ -48,6 +49,5 @@ export async function GET(
         return response
     }
 
-    // 4. 没找到链接，跳回首页
-    return NextResponse.redirect(new URL('/', request.url))
+    return NextResponse.redirect(new URL('/link-not-found', request.url))
 }
