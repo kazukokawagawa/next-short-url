@@ -28,6 +28,10 @@ export function LinkFormFields(props: LinkFormFieldsProps) {
     const [duration, setDuration] = useState('default')
     const [custom, setCustom] = useState('1')
     const [unit, setUnit] = useState('1440')
+    const defaultMinutes = props.defaultExpiration || 0
+    const defaultDurationLabel = defaultMinutes <= 0 ? '永不过期'
+        : defaultMinutes >= 2880 && defaultMinutes % 1440 === 0 ? `${defaultMinutes / 1440} 天`
+            : defaultMinutes % 60 === 0 ? `${defaultMinutes / 60} 小时` : `${defaultMinutes} 分钟`
     const updateExpiration = (option: string, amount = custom, multiplier = unit) => {
         setDuration(option)
         const minutes = option === 'default' ? props.defaultExpiration || 0 : option === 'custom' ? Number(amount) * Number(multiplier) : Number(option)
@@ -55,7 +59,7 @@ export function LinkFormFields(props: LinkFormFieldsProps) {
                         <FormField id={`${id}-expiration`} label="有效期">
                             <Select value={duration} onValueChange={value => updateExpiration(value)} disabled={props.disabled}>
                                 <SelectTrigger id={`${id}-expiration`} className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="default">默认（{props.defaultExpiration ? `${props.defaultExpiration} 分钟` : '永不过期'}）</SelectItem>
+                                <SelectContent><SelectItem value="default">默认（{defaultDurationLabel}）</SelectItem>
                                     <SelectItem value="0">永不过期</SelectItem><SelectItem value="60">1 小时</SelectItem><SelectItem value="1440">24 小时</SelectItem><SelectItem value="10080">7 天</SelectItem><SelectItem value="43200">30 天</SelectItem><SelectItem value="custom">自定义时间</SelectItem>
                                 </SelectContent>
                             </Select>

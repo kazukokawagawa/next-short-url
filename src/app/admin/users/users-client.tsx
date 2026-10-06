@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, RefreshCw, Search, Users, ChevronLeft, ChevronRight, MoreVertical, Eye, ShieldCheck, Ban, CircleCheck, Copy } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Search, Users, ChevronLeft, ChevronRight, MoreVertical, Eye, ShieldCheck, Ban, CircleCheck, Copy, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Container, PageHeader } from '@/components/page-header'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AsyncState } from '@/components/async-state'
 import { listAdminUsers, type AdminUser, type UserFilters } from './actions'
 import { UserMutationDialog } from './user-mutation-dialog'
+import { DeleteUserDialog } from './delete-user-dialog'
 
 export function userDate(value: string | null) {
     if (!value) return '暂无记录'
@@ -34,6 +35,7 @@ export function UsersClient({ initial, viewerId }: { initial: Awaited<ReturnType
     const [filters, setFilters] = useState<UserFilters>({ role: 'all', status: 'all', page: 1 })
     const [loading, setLoading] = useState(false)
     const [mutation, setMutation] = useState<{ user: AdminUser; field: 'role' | 'status' } | null>(null)
+    const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null)
     const requestId = useRef(0)
     const load = async (next: UserFilters = filters) => {
         const id = ++requestId.current
@@ -70,11 +72,12 @@ export function UsersClient({ initial, viewerId }: { initial: Awaited<ReturnType
                 {!result.users.length ? <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-muted-foreground"><Users className="size-6" /><p>没有符合条件的用户</p></div> : <div className="relative max-w-full overflow-x-auto"><table className="w-full min-w-[680px] text-left"><thead className="border-b text-xs text-muted-foreground"><tr><th className="p-3 font-medium">用户</th><th className="p-3 font-medium">角色与状态</th><th className="p-3 font-medium">注册时间</th><th className="p-3 font-medium">最近活跃</th><th className="p-3 font-medium">链接</th><th className="w-12 p-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{result.users.map(user => <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
                     <td className="max-w-72 p-3"><div className="flex items-center gap-1"><Link href={`/admin/users/${user.id}`} title={user.email || user.id} className="block min-w-0 truncate font-medium hover:underline">{user.email || user.id}</Link>{user.email && <IconButton label={`复制 ${user.email}`} className="size-7 shrink-0" onClick={() => void copy(user.email!)}><Copy className="size-3" /></IconButton>}</div>{user.display_name && <p className="truncate text-xs text-muted-foreground">{user.display_name}</p>}{user.id === viewerId && <span className="text-xs text-muted-foreground">当前账号</span>}</td>
                     <td className="p-3"><UserBadges user={user} /></td><td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{userDate(user.created_at)}</td><td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{userDate(user.last_seen_at)}</td><td className="p-3 tabular-nums">{user.link_count}</td>
-                    <td className="p-3"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`用户操作：${user.email || user.id}`}><MoreVertical /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild><Link href={`/admin/users/${user.id}`}><Eye />查看详情</Link></DropdownMenuItem><DropdownMenuItem onSelect={() => setMutation({ user, field: 'role' })}><ShieldCheck />调整角色</DropdownMenuItem><DropdownMenuItem disabled={user.id === viewerId && user.status === 'active'} variant={user.status === 'active' ? 'destructive' : 'default'} onSelect={() => setMutation({ user, field: 'status' })}>{user.status === 'active' ? <Ban /> : <CircleCheck />}{user.status === 'active' ? '禁用账号' : '启用账号'}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></td>
+                    <td className="p-3"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`用户操作：${user.email || user.id}`}><MoreVertical /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild><Link href={`/admin/users/${user.id}`}><Eye />查看详情</Link></DropdownMenuItem><DropdownMenuItem onSelect={() => setMutation({ user, field: 'role' })}><ShieldCheck />调整角色</DropdownMenuItem><DropdownMenuItem disabled={user.id === viewerId && user.status === 'active'} variant={user.status === 'active' ? 'destructive' : 'default'} onSelect={() => setMutation({ user, field: 'status' })}>{user.status === 'active' ? <Ban /> : <CircleCheck />}{user.status === 'active' ? '禁用账号' : '启用账号'}</DropdownMenuItem><DropdownMenuItem variant="destructive" disabled={user.id === viewerId} onSelect={() => setDeleteUser(user)}><Trash2 />删除账号</DropdownMenuItem></DropdownMenuContent></DropdownMenu></td>
                 </tr>)}</tbody></table></div>}
             </motion.div></AnimatePresence>}
         </div>
         <div className="mt-4 flex items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground"><span>第 {result.page} / {pages} 页 · 每页 {result.pageSize} 位</span><div className="flex gap-1"><IconButton label="上一页" disabled={loading || result.page <= 1} onClick={() => void load({ ...filters, page: result.page - 1 })}><ChevronLeft /></IconButton><IconButton label="下一页" disabled={loading || result.page >= pages} onClick={() => void load({ ...filters, page: result.page + 1 })}><ChevronRight /></IconButton></div></div>
         {mutation && <UserMutationDialog key={`${mutation.user.id}-${mutation.field}`} user={mutation.user} field={mutation.field} onClose={() => setMutation(null)} onSuccess={() => void load()} />}
+        {deleteUser && <DeleteUserDialog key={deleteUser.id} user={deleteUser} onClose={() => setDeleteUser(null)} onSuccess={() => void load()} />}
     </Container>
 }

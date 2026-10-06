@@ -14,6 +14,7 @@ const now = '2026-10-07T00:00:00.000Z'
 const admin = { id: adminId, email: 'admin@example.test', role: 'admin', status: 'active', created_at: now, updated_at: now, last_seen_at: now, link_count: 0, display_name: null }
 const target = { ...admin, id: targetId, email: 'very-long-address-for-mobile-layout-testing@example.test', role: 'user', link_count: 1 }
 let failMutation = false
+let targetDeleted = false
 const audits = []
 const mock = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost')
@@ -24,13 +25,21 @@ const mock = createServer(async (req, res) => {
     if (req.method === 'OPTIONS') { res.end(); return }
     const send = value => res.end(JSON.stringify(value))
     if (url.pathname === '/auth/v1/user') return send({ ...admin, aud: 'authenticated', app_metadata: {}, user_metadata: {}, identities: [] })
-    if (url.pathname === '/rest/v1/profiles') return send(url.searchParams.get('id')?.includes(targetId) ? { ...target, display_name: null } : { ...admin, display_name: null })
+    if (url.pathname === '/rest/v1/profiles') { if (req.method === 'HEAD') res.setHeader('Content-Range', '0-1/2'); return send(url.searchParams.get('id')?.includes(targetId) ? { ...target, display_name: null } : { ...admin, display_name: null }) }
     if (url.pathname === '/rest/v1/settings') return send({ value: {} })
     if (url.pathname === '/rest/v1/rpc/admin_list_users') {
         const chunks = []; for await (const c of req) chunks.push(c)
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        const users = [admin, target].filter(user => (body.p_role === 'all' || body.p_role === user.role) && (body.p_status === 'all' || body.p_status === user.status) && user.email.includes(body.p_search || ''))
+        const users = [admin, ...(targetDeleted ? [] : [target])].filter(user => (body.p_role === 'all' || body.p_role === user.role) && (body.p_status === 'all' || body.p_status === user.status) && user.email.includes(body.p_search || ''))
         return send({ users, total: users.length, page: body.p_page || 1, pageSize: 20 })
+    }
+    if (url.pathname === '/rest/v1/rpc/admin_delete_user') {
+        const chunks = []; for await (const c of req) chunks.push(c)
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        assert.equal(body.p_confirmation, target.email)
+        assert.equal(body.p_id, targetId)
+        targetDeleted = true
+        return send(null)
     }
     if (url.pathname === '/rest/v1/rpc/admin_update_user') {
         if (failMutation) { res.statusCode = 400; return send({ message: 'LAST_ADMIN', code: 'P0001' }) }
@@ -60,6 +69,7 @@ const child = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/b
 child.stdout.on('data', chunk => logs.push(chunk.toString()))
 child.stderr.on('data', chunk => logs.push(chunk.toString()))
 let browser
+let currentPage
 try {
     for (let attempt = 0; attempt < 90; attempt++) {
         if (logs.join('').includes('Ready in')) break
@@ -72,11 +82,13 @@ try {
     const cookie = `base64-${Buffer.from(JSON.stringify({ access_token: jwt, refresh_token: 'test-refresh', expires_at: Math.floor(Date.now() / 1000) + 3600, user: admin })).toString('base64url')}`
     await context.addCookies([{ name: 'sb-127-auth-token', value: cookie, domain: 'localhost', path: '/' }])
     const page = await context.newPage()
+    currentPage = page
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     await page.goto('http://localhost:3101/admin/users')
     await page.getByRole('heading', { name: '用户与权限' }).waitFor()
     await page.getByRole('link', { name: target.email, exact: true }).waitFor()
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => Object.keys(button).some(key => key.startsWith('__reactProps$') && typeof button[key]?.onClick === 'function')))
     const screenshots = path.join(root, 'reports', 'user-permissions-screenshots')
     await mkdir(screenshots, { recursive: true })
     await page.screenshot({ path: path.join(screenshots, 'users-desktop.png'), fullPage: true })
@@ -129,12 +141,37 @@ try {
     }
     await page.goto('http://localhost:3101/admin/users')
     await page.getByRole('heading', { name: '用户与权限' }).waitFor()
+    await page.goto('http://localhost:3101/admin')
+    await page.getByRole('heading', { name: '管理控制台' }).waitFor()
+    await page.screenshot({ path: path.join(screenshots, 'admin-mobile.png'), fullPage: true })
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Admin must fit mobile')
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.screenshot({ path: path.join(screenshots, 'admin-desktop.png'), fullPage: true })
+    await page.getByRole('link', { name: /用户与权限/ }).click()
+    await page.getByRole('heading', { name: '用户与权限' }).waitFor()
+    await page.getByRole('button', { name: `用户操作：${target.email}` }).click()
+    await page.getByRole('menuitem', { name: '删除账号' }).click()
+    await page.getByLabel('确认账号').fill('incorrect')
+    await page.getByLabel('操作原因').fill('删除回归测试')
+    assert.ok(await page.getByRole('button', { name: '永久删除', exact: true }).isDisabled())
+    await page.getByLabel('确认账号').fill(target.email)
+    await page.getByRole('button', { name: '永久删除', exact: true }).click()
+    await page.getByText('账号已删除，关联短链接已清理', { exact: true }).waitFor()
+    assert.ok(targetDeleted)
+    assert.equal(await page.locator('[data-sonner-toast] [data-close-button]').count(), 0)
     await page.getByRole('textbox', { name: '搜索邮箱、名称或用户 ID' }).fill('missing-user')
     await page.getByRole('button', { name: '搜索用户', exact: true }).click()
     await page.getByText('没有符合条件的用户', { exact: true }).waitFor()
+    await page.goto('http://localhost:3101/login')
+    await page.getByRole('heading', { name: '账户', exact: true }).waitFor()
+    const selectedLogin = page.getByRole('group', { name: '账户模式' }).getByRole('button', { name: '登录', exact: true })
+    await selectedLogin.waitFor()
+    assert.equal(await selectedLogin.getAttribute('data-variant'), 'default')
+    assert.equal(await selectedLogin.getAttribute('aria-pressed'), 'true')
+    await page.screenshot({ path: path.join(screenshots, 'login-active.png'), fullPage: true })
     assert.deepEqual(errors, [])
-    console.log('Browser checks passed: list, role/status changes, audit, error feedback, search, 1440/768/390px, dialogs and Sonner.')
-} catch (error) { console.error(logs.join('')); throw error }
+    console.log('Browser checks passed: admin overview, delete confirmation, login selected state, role/status changes, audit, error feedback, search, 1440/768/390px, dialogs and Sonner without close buttons.')
+} catch (error) { console.error(logs.join('')); console.error('Page:', currentPage?.url(), await currentPage?.locator('body').innerText()); throw error }
 finally {
     await browser?.close()
     if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'])

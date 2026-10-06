@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, ShieldCheck, Ban, CircleCheck, RefreshCw, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Ban, CircleCheck, RefreshCw, ChevronLeft, ChevronRight, Copy, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Container, PageHeader } from '@/components/page-header'
 import { IconButton } from '@/components/ui/icon-button'
@@ -13,6 +13,7 @@ import { AsyncState } from '@/components/async-state'
 import type { LinkSummary } from '@/lib/link-model'
 import type { AdminUser } from '../actions'
 import { UserMutationDialog } from '../user-mutation-dialog'
+import { DeleteUserDialog } from '../delete-user-dialog'
 import { UserBadges, userDate } from '../users-client'
 
 export type AuditEntry = { id: number; actor_email: string | null; action: string; before_value: { role?: string; status?: string; slug?: string }; after_value: { role?: string; status?: string }; reason: string; created_at: string }
@@ -23,6 +24,7 @@ export function UserDetailClient({ user, viewerId, links, linksTotal, linksPage,
     const searchParams = useSearchParams()
     const reducedMotion = useReducedMotion()
     const [field, setField] = useState<'role' | 'status' | null>(null)
+    const [deleteOpen, setDeleteOpen] = useState(false)
     const [tab, setTab] = useState<'links' | 'audit'>('links')
     const navigate = (name: 'linksPage' | 'auditPage', page: number) => {
         const query = new URLSearchParams(searchParams.toString())
@@ -36,7 +38,7 @@ export function UserDetailClient({ user, viewerId, links, linksTotal, linksPage,
     const pages = Math.max(1, Math.ceil((tab === 'links' ? linksTotal : auditTotal) / (tab === 'links' ? 12 : 20)))
     const page = tab === 'links' ? linksPage : auditPage
     return <Container>
-        <PageHeader title={user.display_name || '用户详情'} description={user.email || user.id} back={<IconButton label="返回用户列表" onClick={() => router.push('/admin/users')}><ArrowLeft /></IconButton>} actions={<><IconButton label="刷新用户信息" onClick={() => router.refresh()}><RefreshCw /></IconButton><Button variant="outline" onClick={() => setField('role')}><ShieldCheck />调整角色</Button><Button variant={user.status === 'active' ? 'destructive' : 'outline'} disabled={user.id === viewerId && user.status === 'active'} onClick={() => setField('status')}>{user.status === 'active' ? <Ban /> : <CircleCheck />}{user.status === 'active' ? '禁用账号' : '启用账号'}</Button></>} />
+        <PageHeader title={user.display_name || '用户详情'} description={user.email || user.id} back={<IconButton label="返回用户列表" onClick={() => router.push('/admin/users')}><ArrowLeft /></IconButton>} actions={<><IconButton label="刷新用户信息" onClick={() => router.refresh()}><RefreshCw /></IconButton><Button variant="outline" onClick={() => setField('role')}><ShieldCheck />调整角色</Button><Button variant={user.status === 'active' ? 'outline' : 'secondary'} disabled={user.id === viewerId && user.status === 'active'} onClick={() => setField('status')}>{user.status === 'active' ? <Ban /> : <CircleCheck />}{user.status === 'active' ? '禁用账号' : '启用账号'}</Button><Button variant="destructive" disabled={user.id === viewerId} onClick={() => setDeleteOpen(true)}><Trash2 />删除账号</Button></>} />
         <section className="mb-6 border-b pb-6"><UserBadges user={user} /><dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><div className="min-w-0"><dt className="text-xs text-muted-foreground">用户 ID</dt><dd className="mt-1 flex items-center gap-1"><span className="min-w-0 break-all font-mono text-xs">{user.id}</span><IconButton label="复制用户 ID" className="size-7 shrink-0" onClick={() => void copyId()}><Copy className="size-3" /></IconButton></dd></div><div><dt className="text-xs text-muted-foreground">注册时间</dt><dd className="mt-1">{userDate(user.created_at)}</dd></div><div><dt className="text-xs text-muted-foreground">最近活跃</dt><dd className="mt-1">{userDate(user.last_seen_at)}</dd></div><div><dt className="text-xs text-muted-foreground">短链接</dt><dd className="mt-1 tabular-nums">{linksTotal}</dd></div></dl></section>
         <div role="tablist" aria-label="用户资源" className="mb-5 flex gap-5 border-b"><button type="button" id="user-links-tab" role="tab" aria-selected={tab === 'links'} aria-controls="user-links-panel" onClick={() => setTab('links')} className={`border-b-2 py-3 transition-colors ${tab === 'links' ? 'border-primary font-medium' : 'border-transparent text-muted-foreground'}`}>短链接 ({linksTotal})</button><button type="button" id="user-audit-tab" role="tab" aria-selected={tab === 'audit'} aria-controls="user-audit-panel" onClick={() => setTab('audit')} className={`border-b-2 py-3 transition-colors ${tab === 'audit' ? 'border-primary font-medium' : 'border-transparent text-muted-foreground'}`}>操作记录 ({auditTotal})</button></div>
         <motion.section key={tab} role="tabpanel" id={tab === 'links' ? 'user-links-panel' : 'user-audit-panel'} aria-labelledby={tab === 'links' ? 'user-links-tab' : 'user-audit-tab'} initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.18 }} className="min-h-48">
@@ -44,5 +46,6 @@ export function UserDetailClient({ user, viewerId, links, linksTotal, linksPage,
         </motion.section>
         <div className="mt-5 flex items-center justify-between border-t pt-4 text-xs text-muted-foreground"><span>第 {page} / {pages} 页</span><div className="flex gap-1"><IconButton label="上一页" disabled={page <= 1} onClick={() => navigate(tab === 'links' ? 'linksPage' : 'auditPage', page - 1)}><ChevronLeft /></IconButton><IconButton label="下一页" disabled={page >= pages} onClick={() => navigate(tab === 'links' ? 'linksPage' : 'auditPage', page + 1)}><ChevronRight /></IconButton></div></div>
         {field && <UserMutationDialog key={`${field}-${user.updated_at}`} user={user} field={field} onClose={() => setField(null)} onSuccess={() => router.refresh()} />}
+        {deleteOpen && <DeleteUserDialog user={user} onClose={() => setDeleteOpen(false)} onSuccess={() => router.push('/admin/users')} />}
     </Container>
 }

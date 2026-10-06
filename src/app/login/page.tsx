@@ -66,8 +66,8 @@ export default function LoginPage({ searchParams }: { searchParams: Promise<{ me
         <h1 className="mb-6 text-2xl font-semibold">账户</h1>
         {configError ? <AsyncState error={configError} onRetry={() => setAttempt(value => value + 1)} /> : !config ? <AsyncState /> : <>
             <div role="group" aria-label="账户模式" className="mb-6 grid grid-cols-2 gap-1 border-b pb-2">
-                <Button variant={mode === 'login' ? 'secondary' : 'ghost'} aria-pressed={mode === 'login'} disabled={pending} onClick={() => { setMode('login'); setError(''); setToken('') }}>登录</Button>
-                <Button variant={mode === 'signup' ? 'secondary' : 'ghost'} aria-pressed={mode === 'signup'} disabled={pending || !config.open} onClick={() => { setMode('signup'); setError(''); setToken('') }}>注册</Button>
+                <Button variant={mode === 'login' ? 'default' : 'ghost'} aria-pressed={mode === 'login'} disabled={pending} onClick={() => { setMode('login'); setError(''); setToken('') }}>登录</Button>
+                <Button variant={mode === 'signup' ? 'default' : 'ghost'} aria-pressed={mode === 'signup'} disabled={pending || !config.open} onClick={() => { setMode('signup'); setError(''); setToken('') }}>注册</Button>
             </div>
             {!config.open && <p className="mb-4 text-sm text-muted-foreground">暂未开放注册</p>}
             <form onSubmit={submit} noValidate className="space-y-4">
@@ -77,7 +77,7 @@ export default function LoginPage({ searchParams }: { searchParams: Promise<{ me
                 {mode === 'signup' && config.captcha && <TurnstileInline ref={captcha} siteKey={config.key} onSuccess={setToken} onError={() => { setToken(''); setError('验证失败，请重试。') }} />}
                 {(error || params.message) && <p role="alert" className="break-words text-sm text-destructive">{error || params.message}</p>}
                 {message && <p role="status" className="text-sm text-success">{message}</p>}
-                <LoadingButton type="submit" loading={pending} icon={mode === 'login' ? <LogIn /> : <UserPlus />} className="w-full">{mode === 'login' ? '登录' : '注册'}</LoadingButton>
+                <LoadingButton type="submit" loading={pending} icon={mode === 'login' ? <LogIn /> : <UserPlus />} className="w-full disabled:opacity-100">{mode === 'login' ? '登录' : '注册'}</LoadingButton>
             </form>
         </>}
     </section>

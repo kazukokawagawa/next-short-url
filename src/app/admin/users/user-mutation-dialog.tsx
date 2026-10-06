@@ -37,7 +37,6 @@ export function UserMutationDialog({ user, field, onClose, onSuccess }: { user: 
                 toast.success(field === 'role' ? '角色已更新' : disabling ? '账号已禁用' : '账号已启用', { id: notification })
                 onClose()
                 onSuccess()
-                router.refresh()
             }
         } catch {
             setError('网络异常，请重试。')

@@ -36,6 +36,9 @@ create policy historical_settings on public.settings for all to authenticated us
 const migration = await readFile(new URL('../supabase/migrations/202610070001_user_permissions.sql', import.meta.url), 'utf8')
 await db.exec(migration)
 await db.exec(migration)
+const deletionMigration = await readFile(new URL('../supabase/migrations/202610070002_delete_user.sql', import.meta.url), 'utf8')
+await db.exec(deletionMigration)
+await db.exec(deletionMigration)
 await db.exec(`insert into auth.users(id,email) values ('${ids.admin}','admin@example.test'),('${ids.userA}','a@example.test'),('${ids.userB}','b@example.test'),('${ids.admin2}','admin2@example.test');
 update profiles set role='admin' where id in ('${ids.admin}', '${ids.admin2}');
 insert into links(user_id,user_email,slug,original_url) values ('${ids.userA}','a@example.test','a-link','https://example.test/a'),('${ids.userB}','b@example.test','b-link','https://example.test/b');`)
@@ -111,5 +114,28 @@ await test('privileged deletions create audit entries without URLs', async () =>
     assert.equal(row.before_value.slug, 'b-link')
     assert.equal(row.before_value.original_url, undefined)
     assert.equal((await asUser(ids.userA, 'select * from admin_audit_logs')).rows.length, 0)
+})
+await test('account deletion requires admin, confirmation, freshness and protects self/last admin', async () => {
+    const remove = async (id, actor = ids.admin, confirmation = null, stamp = null) => {
+        const row = (await db.query('select email,updated_at::text from profiles where id=$1', [id])).rows[0]
+        return asUser(actor, 'select admin_delete_user($1,$2,$3,$4)', [id, stamp ?? row.updated_at, confirmation ?? row.email, 'deletion test'])
+    }
+    await assert.rejects(remove(ids.userA, ids.userB), /FORBIDDEN/)
+    await assert.rejects(remove(ids.admin), /SELF_DELETE/)
+    await assert.rejects(remove(ids.userA, ids.admin, 'wrong-confirmation'), /INVALID_INPUT/)
+    await assert.rejects(remove(ids.userA, ids.admin, null, '2000-01-01T00:00:00Z'), /STALE_USER/)
+    await change(ids.admin2, 'role', 'user')
+    await assert.rejects(remove(ids.admin), /LAST_ADMIN/)
+    await change(ids.admin2, 'role', 'admin')
+    await change(ids.userB, 'status', 'disabled', ids.admin2)
+    await db.query('update profiles set disabled_by=$1 where id=$2', [ids.userA, ids.userB])
+    await remove(ids.userA)
+    assert.equal((await db.query('select * from auth.users where id=$1', [ids.userA])).rows.length, 0)
+    assert.equal((await db.query('select * from profiles where id=$1', [ids.userA])).rows.length, 0)
+    assert.equal((await db.query('select * from links where user_id=$1', [ids.userA])).rows.length, 0)
+    assert.equal((await db.query('select disabled_by from profiles where id=$1', [ids.userB])).rows[0].disabled_by, null)
+    const audit = (await db.query("select before_value,reason from admin_audit_logs where action='user.delete' and target_id=$1", [ids.userA])).rows[0]
+    assert.equal(audit.before_value.deleted_links, 1)
+    assert.equal(audit.reason, 'deletion test')
 })
 await db.close()

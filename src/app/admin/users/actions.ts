@@ -34,6 +34,28 @@ export async function listAdminUsers(filters: UserFilters = {}): Promise<{ users
     return { users: Array.isArray(result.users) ? result.users : [], total: Number(result.total ?? 0), page: Number(result.page ?? page), pageSize: Number(result.pageSize ?? 20) }
 }
 
+export async function deleteAdminUser(input: { id: string; expectedUpdatedAt: string; confirmation: string; reason: string }) {
+    const supabase = await createClient()
+    const auth = await requireAdmin(supabase)
+    if (!auth.user) return { error: auth.error, needsLogin: auth.needsLogin }
+    if (!input || typeof input.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id)
+        || typeof input.reason !== 'string' || !input.reason.trim() || input.reason.trim().length > 500
+        || typeof input.confirmation !== 'string' || input.confirmation.length > 320) return { error: '请填写有效的删除确认和操作原因' }
+    const { error } = await supabase.rpc('admin_delete_user', {
+        p_id: input.id, p_expected_updated_at: input.expectedUpdatedAt, p_confirmation: input.confirmation, p_reason: input.reason.trim()
+    })
+    if (error) return { error: error.message.includes('LAST_ADMIN') ? '不能删除最后一个有效管理员'
+        : error.message.includes('SELF_DELETE') ? '不能删除当前登录账号'
+            : error.message.includes('STALE_USER') ? '用户信息已更新，请刷新后重试'
+                : error.code === 'PGRST202' || error.code === '42883' ? '删除账号数据库功能尚未升级，请执行 202610070002_delete_user.sql'
+                    : error.message.includes('INVALID_INPUT') ? '删除确认不匹配，请重新输入账号邮箱或 ID'
+                        : getFriendlyErrorMessage(error) }
+    revalidatePath('/admin/users')
+    revalidatePath('/admin/links')
+    revalidatePath('/admin')
+    return { success: true }
+}
+
 export async function updateAdminUser(input: { id: string; field: 'role' | 'status'; value: 'user' | 'admin' | 'active' | 'disabled'; expectedUpdatedAt: string; reason: string }) {
     const supabase = await createClient()
     const authResult = await requireAdmin(supabase)

@@ -10,6 +10,11 @@
 !.yarn/releases
 !.yarn/versions
 
+# local reports and verification artifacts
+/reports/
+/build-animation-check.log
+/debug-fetch.js
+
 # testing
 /coverage
 
